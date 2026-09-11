@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Word 单词提取</title>
+  <style>
+    :root {
+      --bg-top: #e8f0f4;
+      --bg-bottom: #f7f3ec;
+      --ink: #1c2a32;
+      --muted: #5a6b75;
+      --accent: #0f6a5c;
+      --accent-hover: #0b5449;
+      --line: #c5d2da;
+      --surface: rgba(255, 255, 255, 0.72);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 18%, rgba(15, 106, 92, 0.12), transparent 42%),
+        linear-gradient(165deg, var(--bg-top), var(--bg-bottom));
+      display: grid;
+      place-items: center;
+      padding: 2rem 1rem;
+    }
+
+    main { width: min(640px, 100%); }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.6rem;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 2.4rem);
+      letter-spacing: -0.02em;
+      font-weight: 700;
+    }
+
+    .settings-link {
+      display: inline-block;
+      background: #1c4d6e;
+      color: #fff;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 0.55rem 0.9rem;
+      white-space: nowrap;
+    }
+
+    .settings-link:hover { background: #163d57; }
+
+    .lead {
+      margin: 0 0 1.5rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    form {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      backdrop-filter: blur(8px);
+      padding: 1.4rem;
+      display: grid;
+      gap: 1.1rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.45rem;
+    }
+
+    input[type="file"],
+    textarea,
+    select {
+      width: 100%;
+      padding: 0.85rem;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }
+
+    input[type="file"] { border-style: dashed; }
+
+    textarea {
+      min-height: 160px;
+      resize: vertical;
+      line-height: 1.5;
+    }
+
+    .hint {
+      margin: 0.45rem 0 0;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .divider {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 0.75rem;
+      align-items: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: "";
+      height: 1px;
+      background: var(--line);
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      background: var(--accent);
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      padding: 0.85rem 1.1rem;
+      cursor: pointer;
+    }
+
+    button:hover { background: var(--accent-hover); }
+
+    .file-name {
+      min-height: 1.25rem;
+      font-size: 0.9rem;
+      color: var(--accent);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="topbar">
+      <h1>Word 单词提取</h1>
+      <a class="settings-link" href="/settings">设置</a>
+    </div>
+    <p class="lead">
+      上传 Word 或直接输入文章：提取后按绿/黄/红分类，人工确认后再下载标注文档与本地词典释义表。
+    </p>
+    <p class="hint" id="serverHint" hidden style="color:#a33;margin-bottom:1rem;"></p>
+
+    <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+      <div>
+        <label for="wordlist">选择对照表</label>
+        <select id="wordlist" name="wordlist">
+          <!--WORDLIST_OPTIONS-->
+        </select>
+        <p class="hint">对照表位于 wordlists/ 文件夹，可在设置中新增或编辑</p>
+      </div>
+
+      <div>
+        <label for="article">直接输入文章（可选）</label>
+        <textarea
+          id="article"
+          name="article"
+          placeholder="在此粘贴或输入英文文章……"
+        ></textarea>
+        <p class="hint">可与下方 Word 文档二选一，也可同时提交（会合并提取）</p>
+      </div>
+
+      <div class="divider">或者</div>
+
+      <div>
+        <label for="document">选择 Word 文档（可选）</label>
+        <input
+          id="document"
+          name="document"
+          type="file"
+          accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        />
+        <p class="hint">目前支持 .docx；上传后可下载三色标注副本</p>
+        <p class="file-name" id="fileName" aria-live="polite"></p>
+      </div>
+      <button type="submit" id="submitBtn">提交并提取单词</button>
+    </form>
+  </main>
+
+  <script>
+    const input = document.getElementById("document");
+    const article = document.getElementById("article");
+    const fileName = document.getElementById("fileName");
+    const form = document.getElementById("uploadForm");
+    const hint = document.getElementById("serverHint");
+    const submitBtn = document.getElementById("submitBtn");
+
+    if (location.protocol === "file:") {
+      hint.hidden = false;
+      hint.textContent =
+        "检测到你直接打开了本地 HTML。请运行 python app.py，然后访问 http://127.0.0.1:5000";
+      submitBtn.disabled = true;
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        alert("请通过 http://127.0.0.1:5000 访问本页面，不要直接打开 index.html");
+      });
+    }
+
+    form.addEventListener("submit", (event) => {
+      const hasFile = input.files && input.files.length > 0;
+      const hasText = article.value.trim().length > 0;
+      if (!hasFile && !hasText) {
+        event.preventDefault();
+        alert("请上传 Word 文档，或在文本框中输入文章。");
+      }
+    });
+
+    input.addEventListener("change", () => {
+      const file = input.files && input.files[0];
+      fileName.textContent = file ? `已选择：${file.name}` : "";
+    });
+  </script>
+</body>
+</html>

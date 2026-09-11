@@ -1,0 +1,16 @@
+.cache/
+.venv/
+__pycache__/
+*.pyc
+baidu_translate_secrets.json
+*.secrets.json
+.env
+.env.*
+dictionaries/*.db
+dictionaries/*.db-journal
+
+# 百度翻译独立方案：保留在本地工作区与历史中，默认不推送到远端
+run_baidu_vocab.py
+Baidu_Text_transAPI.py
+word_retrieval/baidu_translate.py
+api_demo_Baidu_Text_transAPI.rar
