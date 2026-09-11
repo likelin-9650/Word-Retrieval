@@ -192,9 +192,15 @@ The web UI uses **offline ECDICT** by default. Comments in the code mark where a
 
 ## 许可与致谢 · License & Credits
 
+本项目代码采用 **Apache License 2.0** 开源，详见仓库根目录 [`LICENSE`](LICENSE)。  
+This project’s source code is licensed under the **Apache License 2.0**. See [`LICENSE`](LICENSE).
+
+Copyright © 2026 likelin
+
 - 单词分类与学习流程为本项目实现。  
 - 英文词表可来源于 [SCOWL](http://wordlist.aspell.net/) / [wordfreq](https://github.com/rspeer/wordfreq)。  
-- 英汉释义数据基于 [ECDICT](https://github.com/skywind3000/ECDICT)（请遵守其许可证）。
+- 英汉释义数据基于 [ECDICT](https://github.com/skywind3000/ECDICT)（请遵守其许可证）。  
+  Third-party dictionary data keeps its own licenses; this Apache-2.0 grant applies to this project’s code.
 
 ---
 
