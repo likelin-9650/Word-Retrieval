@@ -192,7 +192,7 @@ def render_confirm_page(
       </section>
 
       <section class="panel" data-group="yellow">
-        <h2 style="color:var(--proper)">黄色词 — 可加入对照表 / 大词典 / 二者都加</h2>
+        <h2 style="color:var(--proper)">黄色词 — 可加入对照表 / 大词典（ECDICT 增补） / 二者都加</h2>
         <p class="hint">每个词可单独勾选目标；两者都勾选即同时加入。</p>
         <div class="toolbar">
           <button type="button" data-action="words-all">对照表全选</button>

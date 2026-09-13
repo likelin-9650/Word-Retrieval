@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 try:
@@ -174,3 +175,27 @@ def lookup_definitions(
                 entry.format_text(include_english=include_english) if entry else ""
             )
         return result
+
+
+@lru_cache(maxsize=2)
+def load_ecdict_headwords(db_path: str) -> frozenset[str]:
+    """读取 ECDICT 全部词头（小写），用于黄/红分类大词典。"""
+    path = Path(db_path)
+    if not path.exists():
+        raise EcdictError(
+            f"未找到 ECDICT 数据库：{path.name}。请先运行 build_ecdict_db.py 生成。"
+        )
+    conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        rows = conn.execute("SELECT word FROM ecdict").fetchall()
+    finally:
+        conn.close()
+    return frozenset(
+        str(row[0]).strip().lower()
+        for row in rows
+        if row and str(row[0]).strip()
+    )
+
+
+def clear_ecdict_headwords_cache() -> None:
+    load_ecdict_headwords.cache_clear()

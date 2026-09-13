@@ -14,18 +14,22 @@ from flask import Blueprint, current_app, request, send_file
 from word_retrieval.ecdict import EcdictError, lookup_definitions
 from word_retrieval.extractor import extract_english_words, read_docx_text
 from word_retrieval.highlighter import build_highlighted_docx
+from word_retrieval.inflections import expand_with_inflections
 from word_retrieval.lexicon import (
     append_words_to_file,
     classify_words,
     create_wordlist,
+    decode_upload_text,
     delete_wordlist,
     ensure_wordlists_dir,
     list_wordlists,
-    load_dictionary,
+    load_classification_dictionary,
     load_known_words,
     normalize_words,
+    parse_and_validate_wordlist_text,
     remove_words_from_file,
     resolve_wordlist_path,
+    update_dict_overrides,
 )
 from word_retrieval.pages.confirm import render_confirm_page
 from word_retrieval.pages.message import render_message_page
@@ -108,6 +112,14 @@ def _render_index(selected_wordlist: str = "words.txt") -> str:
     return html.replace("<!--WORDLIST_OPTIONS-->", options_html)
 
 
+def _classification_dictionary() -> frozenset[str]:
+    return load_classification_dictionary(
+        ecdict_db=Path(current_app.config["ECDICT_DB"]),
+        extra_path=Path(current_app.config["DICT_EXTRA"]),
+        exclude_path=Path(current_app.config["DICT_EXCLUDE"]),
+    )
+
+
 def _begin_review(
     text: str,
     *,
@@ -116,11 +128,11 @@ def _begin_review(
     highlight_bytes: bytes | None = None,
     stem: str = "article",
 ):
-    dict_path = Path(current_app.config["SCOWL_WORDS"])
+    dict_path = Path(current_app.config["ECDICT_DB"])
     if not dict_path.exists():
         return render_message_page(
             "缺少大词典",
-            f"未找到 {dict_path.name}。请运行 build_scowl_words.py 生成。",
+            f"未找到 ECDICT 数据库 {dict_path.name}。请运行 build_ecdict_db.py 生成。",
             status=500,
         )
     if not wordlist_path.exists():
@@ -131,7 +143,10 @@ def _begin_review(
         )
 
     known = load_known_words(str(wordlist_path))
-    dictionary = load_dictionary(str(dict_path))
+    try:
+        dictionary = _classification_dictionary()
+    except EcdictError as exc:
+        return render_message_page("缺少大词典", str(exc), status=500)
     words = extract_english_words(text)
     green, yellow, red = classify_words(words, known=known, dictionary=dictionary)
 
@@ -174,7 +189,8 @@ def _finalize_session(
     red_to_words: set[str],
 ):
     words_path = Path(session["wordlist_path"])
-    dict_path = Path(current_app.config["SCOWL_WORDS"])
+    dict_extra = Path(current_app.config["DICT_EXTRA"])
+    dict_exclude = Path(current_app.config["DICT_EXCLUDE"])
 
     save_green &= set(session["green"])
     yellow_to_words &= set(session["yellow"])
@@ -186,7 +202,14 @@ def _finalize_session(
         words_path,
         save_green | yellow_to_words | red_to_words,
     )
-    saved_to_dict = append_words_to_file(dict_path, yellow_to_dict)
+    # 黄词「加入大词典」→ 写入 ECDICT 本地增补表
+    added_extra, _excluded = update_dict_overrides(
+        extra_path=dict_extra,
+        exclude_path=dict_exclude,
+        add_words=yellow_to_dict,
+        remove_words=set(),
+    )
+    saved_to_dict = added_extra
 
     # 文档着色：按用户操作后的最终归属
     doc_green = set(session["green"]) | save_green | yellow_to_words | red_to_words
@@ -250,9 +273,12 @@ def _finalize_session(
         pairs = [(word, "") for word in sorted(keep_red)]
         vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
 
-    # 结果页展示：按最终写入后的分类，红列表仅展示确认进入翻译表的词
+    # 结果页展示：按最终写入后的分类，红列表仅展示确认进入释义表的词
     known = load_known_words(str(words_path))
-    dictionary = load_dictionary(str(dict_path))
+    try:
+        dictionary = _classification_dictionary()
+    except EcdictError:
+        dictionary = frozenset()
     all_words = set(session["green"]) | set(session["yellow"]) | set(session["red"])
     green, yellow, _red = classify_words(all_words, known=known, dictionary=dictionary)
 
@@ -303,14 +329,18 @@ def settings_post():
 
     try:
         if action == "edit_dict":
-            dict_path = Path(current_app.config["SCOWL_WORDS"])
-            added = append_words_to_file(
-                dict_path, _parse_words_textarea(request.form.get("add_words") or "")
+            added, excluded = update_dict_overrides(
+                extra_path=Path(current_app.config["DICT_EXTRA"]),
+                exclude_path=Path(current_app.config["DICT_EXCLUDE"]),
+                add_words=_parse_words_textarea(request.form.get("add_words") or ""),
+                remove_words=_parse_words_textarea(
+                    request.form.get("remove_words") or ""
+                ),
             )
-            removed = remove_words_from_file(
-                dict_path, _parse_words_textarea(request.form.get("remove_words") or "")
+            message = (
+                f"大词典覆盖已更新：增补 {added} 个，排除 {excluded} 个。"
+                "（基础词表仍为 ECDICT）"
             )
-            message = f"大词典已更新：新增 {added} 个，删除 {removed} 个。"
 
         elif action == "edit_wordlist":
             path = resolve_wordlist_path(wordlists_dir, selected)
@@ -325,7 +355,34 @@ def settings_post():
 
         elif action == "create_wordlist":
             path = create_wordlist(wordlists_dir, request.form.get("new_name") or "")
-            message = f"已创建对照表：{path.name}"
+            message = f"已创建空对照表：{path.name}"
+            selected = path.name
+
+        elif action == "upload_wordlist":
+            name = request.form.get("new_name") or ""
+            uploaded = request.files.get("wordlist_file")
+            if uploaded is None or not uploaded.filename:
+                raise ValueError("请选择要上传的 .txt 文件。")
+            filename = Path(uploaded.filename).name
+            if not filename.lower().endswith(".txt"):
+                raise ValueError("仅支持 .txt 文件。")
+            raw = uploaded.read()
+            text = decode_upload_text(raw)
+            words = parse_and_validate_wordlist_text(text)
+            base_count = len(words)
+            add_inflections = (request.form.get("add_inflections") or "") == "1"
+            if add_inflections:
+                words_set = expand_with_inflections(words)
+            else:
+                words_set = set(words)
+            path = create_wordlist(wordlists_dir, name, words=words_set)
+            if add_inflections:
+                message = (
+                    f"已从文件创建对照表 {path.name}："
+                    f"原词 {base_count} 个，含派生词共 {len(words_set)} 个。"
+                )
+            else:
+                message = f"已从文件创建对照表 {path.name}：导入 {base_count} 个单词。"
             selected = path.name
 
         elif action == "delete_wordlist":

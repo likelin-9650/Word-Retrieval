@@ -8,6 +8,8 @@ baidu_translate_secrets.json
 .env.*
 dictionaries/*.db
 dictionaries/*.db-journal
+dictionaries/dict_extra.txt
+dictionaries/dict_exclude.txt
 
 # 百度翻译独立方案：保留在本地工作区与历史中，默认不推送到远端
 run_baidu_vocab.py

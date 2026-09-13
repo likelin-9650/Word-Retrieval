@@ -1,4 +1,4 @@
-"""设置页面：编辑大词典/对照表，新建对照表。"""
+"""设置页面：编辑大词典/对照表，新建对照表（空表或上传）。"""
 
 from __future__ import annotations
 
@@ -63,13 +63,24 @@ def render_settings_page(
       padding: 1.1rem 1.2rem; margin-bottom: 1rem;
     }}
     label {{ display: block; font-weight: 600; margin: 0.5rem 0 0.35rem; }}
-    input[type="text"], select, textarea {{
+    input[type="text"], input[type="file"], select, textarea {{
       width: 100%; padding: 0.7rem; border: 1px solid var(--line);
       font: inherit; background: #fff;
     }}
+    input[type="file"] {{ border-style: dashed; }}
     textarea {{ min-height: 110px; resize: vertical; }}
-    .hint {{ color: var(--muted); font-size: 0.88rem; margin: 0.35rem 0 0.7rem; }}
-    .row {{ display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.7rem; }}
+    .hint {{ color: var(--muted); font-size: 0.88rem; margin: 0.35rem 0 0.7rem; line-height: 1.45; }}
+    .req {{
+      background: rgba(28, 77, 110, 0.06); border: 1px solid var(--line);
+      padding: 0.75rem 0.9rem; margin: 0.5rem 0 0.9rem; font-size: 0.88rem;
+      color: var(--muted); line-height: 1.5;
+    }}
+    .req strong {{ color: var(--ink); }}
+    .row {{ display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.7rem; align-items: center; }}
+    .check {{
+      display: flex; align-items: center; gap: 0.45rem; font-weight: 600; margin: 0.6rem 0;
+    }}
+    .check input {{ width: auto; }}
     button, .btn {{
       appearance: none; border: 0; background: var(--accent); color: #fff;
       font: inherit; font-weight: 600; padding: 0.7rem 1rem; cursor: pointer;
@@ -83,20 +94,27 @@ def render_settings_page(
 <body>
   <main>
     <h1>设置</h1>
-    <p class="meta">可编辑大词典与对照表词汇，也可新建对照表。不能新增大词典文件。</p>
+    <p class="meta">
+      大词典用于区分黄词/红词，词头来自本地 ECDICT，可在下方增补或排除。
+      对照表表示「已掌握」词汇（绿色）。
+    </p>
     <p class="meta"><a href="{home}">← 返回首页</a></p>
     {msg_html}
     {err_html}
 
     <section class="panel">
-      <h2>编辑大词典（scowl_words.txt）</h2>
+      <h2>编辑大词典（ECDICT + 本地覆盖）</h2>
+      <p class="hint">
+        基础词表为 ECDICT 全部词头。此处「添加」写入本地增补表，
+        「删除」写入本地排除表（不直接改 ECDICT 数据库）。
+      </p>
       <form method="post" action="{action}">
         <input type="hidden" name="action" value="edit_dict" />
         <label for="dict_add">添加单词（每行一个）</label>
         <textarea id="dict_add" name="add_words" placeholder="apple&#10;banana"></textarea>
-        <label for="dict_remove">删除单词（每行一个）</label>
+        <label for="dict_remove">排除单词（每行一个）</label>
         <textarea id="dict_remove" name="remove_words" placeholder="obsoleteword"></textarea>
-        <div class="row"><button type="submit">更新大词典</button></div>
+        <div class="row"><button type="submit">更新大词典覆盖</button></div>
       </form>
     </section>
 
@@ -115,13 +133,38 @@ def render_settings_page(
     </section>
 
     <section class="panel">
-      <h2>新建对照表</h2>
+      <h2>新建空对照表</h2>
       <form method="post" action="{action}">
         <input type="hidden" name="action" value="create_wordlist" />
         <label for="new_list">名称</label>
-        <input id="new_list" name="new_name" type="text" placeholder="例如 cet4 或 考研词汇" />
-        <p class="hint">将保存为 wordlists/名称.txt。不能用于新增大词典。</p>
-        <div class="row"><button type="submit">创建对照表</button></div>
+        <input id="new_list" name="new_name" type="text" placeholder="例如 cet4 或 考研词汇" required />
+        <p class="hint">将保存为 wordlists/名称.txt（空文件，之后可再编辑）。</p>
+        <div class="row"><button type="submit">创建空对照表</button></div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>上传 .txt 创建对照表</h2>
+      <div class="req">
+        <strong>文件格式与排版要求：</strong><br />
+        1. 扩展名必须为 <strong>.txt</strong>；编码推荐 <strong>UTF-8</strong>（也支持带 BOM 的 UTF-8、GBK）。<br />
+        2. <strong>一行一个英语单词</strong>；允许空行；不要用逗号/空格分隔多个词。<br />
+        3. 单词仅为英文字母，或带撇号缩写（如 <code>don't</code>），或序数缩写（如 <code>1st</code>/<code>2nd</code>）。<br />
+        4. 不要包含中文、标点句子、表格或二进制内容；文件大小不超过 <strong>5 MB</strong>。<br />
+        5. 服务器会校验格式；非法行过多将拒绝导入。
+      </div>
+      <form method="post" action="{action}" enctype="multipart/form-data">
+        <input type="hidden" name="action" value="upload_wordlist" />
+        <label for="upload_name">对照表名称</label>
+        <input id="upload_name" name="new_name" type="text" placeholder="例如 my_vocab" required />
+        <label for="wordlist_file">选择 .txt 文件</label>
+        <input id="wordlist_file" name="wordlist_file" type="file" accept=".txt,text/plain" required />
+        <label class="check">
+          <input type="checkbox" name="add_inflections" value="1" />
+          添加所有上传单词的派生词（屈折变化：如动词过去式/分词、名词复数、形容词比较级等）
+        </label>
+        <p class="hint">勾选后将用 lemminflect 自动扩展词形，并与原词一并写入对照表（自动去重）。</p>
+        <div class="row"><button type="submit">上传并创建</button></div>
       </form>
     </section>
 

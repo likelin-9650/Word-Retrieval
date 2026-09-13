@@ -20,13 +20,14 @@ A local Flask app that extracts English words from `.docx` files or pasted text,
 | 下载着色文档 | Download color-highlighted `.docx` |
 | 本地 ECDICT 多行释义 | Offline ECDICT definitions (POS, senses) |
 | 多对照表管理（设置页） | Multiple checklist wordlists (Settings) |
-| 大词典 `scowl_words.txt` 可维护 | Maintainable SCOWL-style dictionary |
+| 上传 .txt 创建对照表（可选派生词） | Create wordlist from uploaded `.txt` (optional inflections) |
+| 大词典基于 ECDICT（可本地增补/排除） | Classification dictionary from ECDICT (+ local overrides) |
 
 **三色含义 · Color meanings**
 
 - **绿 Green**：已在对照表中（视为已掌握） / Already in your checklist (known)
-- **黄 Yellow**：不在大词典中（多为专有名词、拼写变体等） / Not in the large dictionary (often proper nouns)
-- **红 Red**：在大词典中但不在对照表（未掌握，可进释义表） / In dictionary but not in checklist (unknown; can go to vocab sheet)
+- **黄 Yellow**：不在 ECDICT 大词典中（多为专有名词、拼写变体等） / Not in ECDICT (often proper nouns)
+- **红 Red**：在 ECDICT 中但不在对照表（未掌握，可进释义表） / In ECDICT but not in checklist (unknown)
 
 ---
 
@@ -79,15 +80,11 @@ pip install -r requirements.txt
 
 ### 3. 准备词典数据 · Prepare dictionaries
 
-**对照表 Checklist**（已掌握词）在 `wordlists/`，默认 `wordlists/words.txt`（一行一词）。
+**对照表 Checklist**（已掌握词）在 `wordlists/`，默认 `wordlists/words.txt`（一行一词）。也可在设置页上传 `.txt` 创建，并可选自动添加屈折派生词。
 
-**大词典 Large dictionary**：`scowl_words.txt`（用于区分黄/红）。若缺失：
+**大词典 / Classification dictionary**：黄/红分类使用 **ECDICT 全部词头**（`dictionaries/ecdict.db`）。本地可用 `dictionaries/dict_extra.txt` / `dict_exclude.txt` 增补或排除（设置页编辑）。
 
-```bash
-python build_scowl_words.py
-```
-
-**ECDICT 本地释义库**（生词表用）：生成 `dictionaries/ecdict.db`（约数十 MB，首次需下载 CSV）：
+**ECDICT**（分类 + 生词释义）：生成数据库（约数十 MB，首次需下载 CSV）：
 
 ```bash
 python build_ecdict_db.py
@@ -95,6 +92,8 @@ python build_ecdict_db.py
 
 > `dictionaries/*.db` 默认被 `.gitignore` 忽略；每位使用者需自行构建一次。  
 > The SQLite DB is gitignored; each user should build it once.
+
+可选：`build_scowl_words.py` 仍可生成旧版 `scowl_words.txt`，但网页主流程已不再依赖它做分类。
 
 ### 4. 启动服务 · Run the server
 
@@ -122,8 +121,8 @@ python app.py
    - 未掌握词释义表（ECDICT：音标、词性、中文义项等）  
    **Result**: download highlighted docx (if any) and the vocabulary sheet.
 
-4. **设置 `/settings`**：增删对照表、批量编辑对照表或大词典。  
-   **Settings**: create/delete wordlists; bulk add/remove words.
+4. **设置 `/settings`**：编辑对照表/大词典覆盖；新建空对照表；上传 `.txt` 创建对照表（可勾选添加派生词）。  
+   **Settings**: edit lists; create empty wordlist; upload `.txt` (optional inflections).
 
 上传体积上限约 **16MB**。会话与下载缓存约 **1 小时**有效。
 
@@ -138,18 +137,20 @@ Word-Retrieval/
 ├── requirements.txt
 ├── build_scowl_words.py   # 生成 scowl_words.txt
 ├── build_ecdict_db.py     # 下载 ECDICT 并生成 ecdict.db
-├── scowl_words.txt        # 大词典 · Large English word list
+├── build_scowl_words.py   # （可选）旧版 scowl 词表生成
+├── scowl_words.txt        # （可选）旧词表，网页分类已不依赖
 ├── wordlists/             # 对照表目录 · Checklist wordlists
 │   └── words.txt
-├── dictionaries/          # ECDICT SQLite（本地生成）
+├── dictionaries/          # ECDICT SQLite + 本地覆盖文件
 │   └── .gitkeep
 ├── word_retrieval/        # Flask 应用包 · App package
 │   ├── __init__.py        # create_app()
 │   ├── routes.py          # 路由与主流程 · Routes
 │   ├── extractor.py       # 单词提取 · Extraction
 │   ├── lexicon.py         # 词表与三色分类 · Lexicon
+│   ├── inflections.py     # 屈折派生词 · Inflections
 │   ├── highlighter.py     # 文档着色 · Highlighting
-│   ├── ecdict.py          # ECDICT 查词 · Dictionary lookup
+│   ├── ecdict.py          # ECDICT 查词/词头 · Dictionary
 │   ├── vocab_doc.py       # 生成释义 Word · Vocab docx
 │   └── pages/             # HTML 页面渲染 · Page templates
 └── .gitignore
@@ -162,8 +163,8 @@ Word-Retrieval/
 | 目的 Purpose | 命令 Command |
 |--------------|--------------|
 | 安装依赖 Install deps | `pip install -r requirements.txt` |
-| 生成大词典 Build SCOWL list | `python build_scowl_words.py` |
 | 生成 ECDICT 库 Build ECDICT DB | `python build_ecdict_db.py` |
+| （可选）生成旧 scowl 表 | `python build_scowl_words.py` |
 | 启动网页 Start web app | `python app.py` |
 
 ---
@@ -182,8 +183,9 @@ The web UI uses **offline ECDICT** by default. Comments in the code mark where a
 
 | 问题 Issue | 处理 Fix |
 |------------|----------|
-| 缺少大词典 / Missing `scowl_words.txt` | 运行 `python build_scowl_words.py` |
-| 释义表提示未找到 ECDICT | 运行 `python build_ecdict_db.py` |
+| 缺少大词典 / 分类失败 | 运行 `python build_ecdict_db.py` 生成 `dictionaries/ecdict.db` |
+| 释义表提示未找到 ECDICT | 同上 |
+| 上传对照表被拒绝 | 检查是否一行一词、UTF-8/.txt、无中文句子 |
 | 无法读取文档 | 确认是 `.docx`，非旧版 `.doc` |
 | PowerShell 无法激活 `.venv` | 执行策略限制；可直接用 `.\.venv\Scripts\python.exe app.py` |
 | 推送 GitHub 因大文件失败 | 勿提交 `.venv`；本仓库已在 `.gitignore` 中忽略 |

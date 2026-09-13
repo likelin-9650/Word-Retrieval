@@ -161,7 +161,7 @@ def render_result_page(
 
     <div class="legend">
       <span class="known">绿 = 已掌握</span>
-      <span class="proper">黄 = 不在大词典</span>
+      <span class="proper">黄 = 不在大词典（ECDICT）</span>
       <span class="unknown">红 = 未掌握（将查释义）</span>
     </div>
 

@@ -9,6 +9,13 @@ from pathlib import Path
 
 ORDINAL_RE = re.compile(r"^\d+(?:st|nd|rd|th)$", re.IGNORECASE)
 SAFE_LIST_NAME = re.compile(r"^[A-Za-z0-9_\-\u4e00-\u9fff]{1,64}$")
+# 上传对照表允许的词形：纯字母词、带撇号缩写、序数缩写
+UPLOAD_WORD_RE = re.compile(
+    r"^[A-Za-z]+(?:'[A-Za-z]+)?$|^\d+(?:st|nd|rd|th)$",
+    re.IGNORECASE,
+)
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_UPLOAD_WORDS = 200_000
 
 
 @lru_cache(maxsize=32)
@@ -31,8 +38,61 @@ def load_known_words(path: str) -> frozenset[str]:
 
 
 def load_dictionary(path: str) -> frozenset[str]:
-    """读取本地大词典。"""
+    """读取本地大词典文本文件。"""
     return load_word_set(path)
+
+
+def load_classification_dictionary(
+    *,
+    ecdict_db: Path,
+    extra_path: Path | None = None,
+    exclude_path: Path | None = None,
+) -> frozenset[str]:
+    """
+    黄/红分类用大词典：ECDICT 全部词头 ∪ 本地增补 − 本地排除。
+    """
+    from word_retrieval.ecdict import load_ecdict_headwords
+
+    base = set(load_ecdict_headwords(str(ecdict_db)))
+    if extra_path is not None and extra_path.exists():
+        base |= set(load_word_set(str(extra_path)))
+    if exclude_path is not None and exclude_path.exists():
+        base -= set(load_word_set(str(exclude_path)))
+    return frozenset(base)
+
+
+def ensure_dict_override_files(extra_path: Path, exclude_path: Path) -> None:
+    extra_path.parent.mkdir(parents=True, exist_ok=True)
+    if not extra_path.exists():
+        extra_path.write_text("", encoding="utf-8")
+    if not exclude_path.exists():
+        exclude_path.write_text("", encoding="utf-8")
+
+
+def update_dict_overrides(
+    *,
+    extra_path: Path,
+    exclude_path: Path,
+    add_words: set[str],
+    remove_words: set[str],
+) -> tuple[int, int]:
+    """
+    更新大词典本地覆盖层。
+    新增写入 extra，并从 exclude 去掉；删除写入 exclude，并从 extra 去掉。
+    返回 (写入增补数, 写入排除数)。
+    """
+    ensure_dict_override_files(extra_path, exclude_path)
+    add_set = normalize_words(add_words)
+    remove_set = normalize_words(remove_words)
+    added = append_words_to_file(extra_path, add_set)
+    if add_set:
+        remove_words_from_file(exclude_path, add_set)
+    if remove_set:
+        remove_words_from_file(extra_path, remove_set)
+        excluded = append_words_to_file(exclude_path, remove_set)
+    else:
+        excluded = 0
+    return added, excluded
 
 
 def is_in_dictionary(word: str, dictionary: frozenset[str]) -> bool:
@@ -157,8 +217,13 @@ def resolve_wordlist_path(wordlists_dir: Path, name: str | None) -> Path:
     return path
 
 
-def create_wordlist(wordlists_dir: Path, name: str) -> Path:
-    """新建对照表（不可用于大词典）。"""
+def create_wordlist(
+    wordlists_dir: Path,
+    name: str,
+    *,
+    words: set[str] | None = None,
+) -> Path:
+    """新建对照表；words 为空则创建空文件。"""
     ensure_wordlists_dir(wordlists_dir)
     raw = name.strip()
     if raw.lower().endswith(".txt"):
@@ -168,9 +233,75 @@ def create_wordlist(wordlists_dir: Path, name: str) -> Path:
     path = wordlists_dir / f"{raw}.txt"
     if path.exists():
         raise FileExistsError(f"对照表已存在：{path.name}")
-    path.write_text("", encoding="utf-8")
+    normalized = sorted(normalize_words(words or set()))
+    path.write_text(
+        ("\n".join(normalized) + "\n") if normalized else "",
+        encoding="utf-8",
+    )
     clear_word_cache()
     return path
+
+
+def decode_upload_text(raw: bytes) -> str:
+    """解码上传文本，优先 UTF-8，回退 UTF-8-SIG / GBK。"""
+    if not raw:
+        raise ValueError("上传文件为空。")
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise ValueError(f"文件过大，上限 {MAX_UPLOAD_BYTES // (1024 * 1024)} MB。")
+    # 粗略拒绝明显二进制
+    if b"\x00" in raw[:8192]:
+        raise ValueError("文件疑似二进制，请上传纯文本 .txt。")
+    for encoding in ("utf-8-sig", "utf-8", "gb18030"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("无法解码文件，请使用 UTF-8 或 GBK 编码的 .txt。")
+
+
+def parse_and_validate_wordlist_text(text: str) -> list[str]:
+    """
+    校验对照表文本格式。
+    要求：一行一个英语单词（可空行）；非法行过多则失败。
+    返回去重后的小写词列表（排序）。
+    """
+    lines = text.splitlines()
+    if not lines and not text.strip():
+        raise ValueError("文件没有有效内容。")
+
+    valid: set[str] = set()
+    invalid_samples: list[str] = []
+    invalid_count = 0
+    non_empty = 0
+
+    for line in lines:
+        raw = line.strip()
+        if not raw:
+            continue
+        # 允许行尾注释？用户要求严格一行一词，不支持注释
+        non_empty += 1
+        if UPLOAD_WORD_RE.fullmatch(raw):
+            valid.add(raw.lower())
+        else:
+            invalid_count += 1
+            if len(invalid_samples) < 5:
+                invalid_samples.append(raw[:40])
+
+    if non_empty == 0:
+        raise ValueError("文件没有有效单词行（请一行一个英语单词）。")
+    if len(valid) > MAX_UPLOAD_WORDS:
+        raise ValueError(f"单词数量超过上限 {MAX_UPLOAD_WORDS}。")
+
+    if invalid_count:
+        sample = "、".join(invalid_samples) if invalid_samples else ""
+        raise ValueError(
+            f"格式不符合要求：共 {non_empty} 行非空，其中 {invalid_count} 行非法。"
+            f"要求一行一个英语单词（字母词或 1st/2nd 等序数），请勿在同一行放多个词或中文。"
+            + (f" 示例非法行：{sample}" if sample else "")
+        )
+    if not valid:
+        raise ValueError("未解析到任何合法英语单词。")
+    return sorted(valid)
 
 
 def delete_wordlist(wordlists_dir: Path, name: str) -> None:
