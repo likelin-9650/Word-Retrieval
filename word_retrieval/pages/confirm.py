@@ -24,6 +24,23 @@ def _dual_target_yellow_list(words: list[str]) -> str:
     return '<div class="word-rows">\n' + "\n".join(items) + "\n</div>"
 
 
+def _green_list(words: list[str]) -> str:
+    if not words:
+        return '<p class="empty">无</p>'
+    items = []
+    for word in words:
+        w = html.escape(word)
+        wid = html.escape(word, quote=True)
+        items.append(
+            f'<div class="word-row known">'
+            f'<span class="term">{w}</span>'
+            f'<label><input type="checkbox" name="green_to_vocab" value="{wid}" />进入释义表</label>'
+            f'<label><input type="checkbox" name="green_remove_words" value="{wid}" />剔出对照表</label>'
+            f"</div>"
+        )
+    return '<div class="word-rows">\n' + "\n".join(items) + "\n</div>"
+
+
 def _red_list(words: list[str]) -> str:
     if not words:
         return '<p class="empty">无</p>'
@@ -39,28 +56,6 @@ def _red_list(words: list[str]) -> str:
             f"</div>"
         )
     return '<div class="word-rows">\n' + "\n".join(items) + "\n</div>"
-
-
-def _checkbox_list(
-    words: list[str],
-    *,
-    name: str,
-    css: str,
-    checked: bool,
-) -> str:
-    if not words:
-        return '<p class="empty">无</p>'
-    items = []
-    checked_attr = " checked" if checked else ""
-    for word in words:
-        wid = html.escape(f"{name}_{word}", quote=True)
-        w = html.escape(word)
-        items.append(
-            f'<label class="word {css}" for="{wid}">'
-            f'<input id="{wid}" type="checkbox" name="{name}" value="{w}"{checked_attr} />'
-            f"<span>{w}</span></label>"
-        )
-    return '<div class="word-grid">\n' + "\n".join(items) + "\n</div>"
 
 
 def render_confirm_page(
@@ -79,9 +74,7 @@ def render_confirm_page(
     home = url_for("main.index")
     action = url_for("main.confirm")
 
-    green_html = _checkbox_list(
-        green_sorted, name="save_green", css="known", checked=False
-    )
+    green_html = _green_list(green_sorted)
     yellow_html = _dual_target_yellow_list(yellow_sorted)
     red_html = _red_list(red_sorted)
 
@@ -145,13 +138,9 @@ def render_confirm_page(
       border-bottom: 1px solid rgba(197, 210, 218, 0.55);
     }}
     .word-row .term {{ font-weight: 600; }}
+    .word-row.known .term {{ color: var(--known); }}
     .word-row.proper .term {{ color: var(--proper); }}
     .word-row.unknown .term {{ color: var(--unknown); }}
-    label.word {{
-      display: flex; align-items: center; gap: 0.4rem;
-      font-size: 0.95rem; line-height: 1.3;
-    }}
-    label.word.known span {{ color: var(--known); }}
     .empty {{ color: var(--muted); margin: 0; }}
     .actions {{
       display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; margin-top: 1rem;
@@ -181,12 +170,14 @@ def render_confirm_page(
     <form method="post" action="{action}">
       <input type="hidden" name="session_id" value="{html.escape(session_id)}" />
 
-      <section class="panel" data-group="save_green">
-        <h2 style="color:var(--known)">绿色词 — 勾选后写入当前对照表</h2>
-        <p class="hint">默认不勾选。需要补录时再勾选。</p>
+      <section class="panel" data-group="green">
+        <h2 style="color:var(--known)">绿色词 — 释义表与剔出对照表分开选择</h2>
+        <p class="hint">这些词已在对照表中。「进入释义表」会写入本次释义表；「剔出对照表」会从当前对照表删除该词。两项均默认不勾选。</p>
         <div class="toolbar">
-          <button type="button" data-action="all">全选</button>
-          <button type="button" data-action="none">全不选</button>
+          <button type="button" data-action="vocab-all">释义表全选</button>
+          <button type="button" data-action="vocab-none">释义表全不选</button>
+          <button type="button" data-action="remove-all">剔出全选</button>
+          <button type="button" data-action="remove-none">剔出全不选</button>
         </div>
         {green_html}
       </section>
@@ -222,13 +213,22 @@ def render_confirm_page(
     </form>
   </main>
   <script>
-    document.querySelectorAll('.panel[data-group="save_green"]').forEach((panel) => {{
+    document.querySelectorAll('.panel[data-group="green"]').forEach((panel) => {{
       panel.querySelectorAll("button[data-action]").forEach((btn) => {{
         btn.addEventListener("click", () => {{
-          const on = btn.getAttribute("data-action") === "all";
-          panel.querySelectorAll('input[name="save_green"]').forEach((box) => {{
-            box.checked = on;
-          }});
+          const action = btn.getAttribute("data-action");
+          if (action === "vocab-all" || action === "vocab-none") {{
+            const on = action === "vocab-all";
+            panel.querySelectorAll('input[name="green_to_vocab"]').forEach((box) => {{
+              box.checked = on;
+            }});
+          }}
+          if (action === "remove-all" || action === "remove-none") {{
+            const on = action === "remove-all";
+            panel.querySelectorAll('input[name="green_remove_words"]').forEach((box) => {{
+              box.checked = on;
+            }});
+          }}
         }});
       }});
     }});

@@ -182,7 +182,8 @@ def _begin_review(
 def _finalize_session(
     session: dict,
     *,
-    save_green: set[str],
+    green_to_vocab: set[str],
+    green_remove_words: set[str],
     yellow_to_words: set[str],
     yellow_to_dict: set[str],
     keep_red: set[str],
@@ -192,7 +193,8 @@ def _finalize_session(
     dict_extra = Path(current_app.config["DICT_EXTRA"])
     dict_exclude = Path(current_app.config["DICT_EXCLUDE"])
 
-    save_green &= set(session["green"])
+    green_to_vocab &= set(session["green"])
+    green_remove_words &= set(session["green"])
     yellow_to_words &= set(session["yellow"])
     yellow_to_dict &= set(session["yellow"])
     keep_red &= set(session["red"])
@@ -200,8 +202,10 @@ def _finalize_session(
 
     saved_to_words = append_words_to_file(
         words_path,
-        save_green | yellow_to_words | red_to_words,
+        yellow_to_words | red_to_words,
     )
+    removed_from_words = remove_words_from_file(words_path, green_remove_words)
+
     # 黄词「加入大词典」→ 写入 ECDICT 本地增补表
     added_extra, _excluded = update_dict_overrides(
         extra_path=dict_extra,
@@ -211,16 +215,10 @@ def _finalize_session(
     )
     saved_to_dict = added_extra
 
-    # 文档着色：按用户操作后的最终归属
-    doc_green = set(session["green"]) | save_green | yellow_to_words | red_to_words
-    doc_yellow = set(session["yellow"]) - yellow_to_dict - yellow_to_words
-    # 加入大词典但未进对照表的黄词，按红处理（普通未掌握）
+    # 文档着色：剔出对照表的绿词按未掌握（红）显示
+    doc_green = (set(session["green"]) - green_remove_words) | yellow_to_words | red_to_words
     moved_to_dict_only = yellow_to_dict - yellow_to_words - doc_green
-    doc_red = (keep_red | moved_to_dict_only) - doc_green
-    # 未进入翻译表且未入库的原红词：不再标红（保持默认色）——仍可在结果中体现为未保留
-    # 文档里对“不翻译也不入库”的红词保持红色提示？用户说不保存则不进入翻译表；着色上仍可标红表示未掌握。
-    # 更合理：文档中所有未掌握的红词仍标红，无论是否进入翻译表；仅翻译表用 keep_red。
-    doc_red = (set(session["red"]) | moved_to_dict_only) - doc_green
+    doc_red = (set(session["red"]) | moved_to_dict_only | green_remove_words) - doc_green
     doc_yellow = set(session["yellow"]) - yellow_to_dict - yellow_to_words
 
     stem = session["stem"]
@@ -242,6 +240,9 @@ def _finalize_session(
         highlight_name = f"{stem}_highlighted.docx"
         highlight_token = _store_download(highlighted, highlight_name)
 
+    # 释义表：红词 keep_red ∪ 勾选进释义表的绿词
+    vocab_words = keep_red | green_to_vocab
+
     # 生词释义：当前使用本地 ECDICT。
     # 此处可以改造接入百度翻译 API：将下方 lookup_definitions 替换为
     #   from word_retrieval.baidu_translate import BaiduTranslateError, translate_words
@@ -251,29 +252,31 @@ def _finalize_session(
     vocab_token = None
     vocab_name = f"{stem}_unknown_vocab.docx"
     try:
-        sorted_red = sorted(keep_red)
+        sorted_vocab = sorted(vocab_words)
         definitions = lookup_definitions(
-            sorted_red,
+            sorted_vocab,
             Path(current_app.config["ECDICT_DB"]),
         )
-        pairs = [(word, definitions.get(word, "") or "（词库未收录）") for word in sorted_red]
+        pairs = [
+            (word, definitions.get(word, "") or "（词库未收录）") for word in sorted_vocab
+        ]
         missing = sum(1 for _, text in pairs if text == "（词库未收录）")
-        if missing and sorted_red:
+        if missing and sorted_vocab:
             translate_error = (
-                f"ECDICT 未命中 {missing}/{len(sorted_red)} 个词，"
+                f"ECDICT 未命中 {missing}/{len(sorted_vocab)} 个词，"
                 "已在释义表中标注「词库未收录」。"
             )
         vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
     except EcdictError as exc:
         translate_error = str(exc)
-        pairs = [(word, "") for word in sorted(keep_red)]
+        pairs = [(word, "") for word in sorted(vocab_words)]
         vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
     except Exception as exc:  # noqa: BLE001
         translate_error = f"查词过程出错：{exc}"
-        pairs = [(word, "") for word in sorted(keep_red)]
+        pairs = [(word, "") for word in sorted(vocab_words)]
         vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
 
-    # 结果页展示：按最终写入后的分类，红列表仅展示确认进入释义表的词
+    # 结果页展示：按最终写入后的分类；释义相关列表展示进入释义表的词
     known = load_known_words(str(words_path))
     try:
         dictionary = _classification_dictionary()
@@ -286,13 +289,14 @@ def _finalize_session(
         source_label=f"{source_label}（对照表 {session['wordlist_name']}）",
         green_words=green,
         yellow_words=yellow,
-        red_words=keep_red,
+        red_words=vocab_words,
         highlight_token=highlight_token,
         highlight_name=highlight_name,
         vocab_token=vocab_token,
         vocab_name=vocab_name,
         translate_error=translate_error,
         saved_count=saved_to_words + saved_to_dict,
+        removed_count=removed_from_words,
     )
 
 
@@ -476,8 +480,13 @@ def confirm():
             status=404,
         )
 
-    save_green = {
-        v.strip().lower() for v in request.form.getlist("save_green") if v.strip()
+    green_to_vocab = {
+        v.strip().lower() for v in request.form.getlist("green_to_vocab") if v.strip()
+    }
+    green_remove_words = {
+        v.strip().lower()
+        for v in request.form.getlist("green_remove_words")
+        if v.strip()
     }
     yellow_to_words = {
         v.strip().lower() for v in request.form.getlist("yellow_to_words") if v.strip()
@@ -492,7 +501,8 @@ def confirm():
 
     return _finalize_session(
         session,
-        save_green=save_green,
+        green_to_vocab=green_to_vocab,
+        green_remove_words=green_remove_words,
         yellow_to_words=yellow_to_words,
         yellow_to_dict=yellow_to_dict,
         keep_red=keep_red,

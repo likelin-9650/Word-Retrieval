@@ -19,6 +19,7 @@ def render_result_page(
     vocab_name: str | None = None,
     translate_error: str | None = None,
     saved_count: int = 0,
+    removed_count: int = 0,
 ) -> str:
     """生成展示提取结果的 HTML 页面。"""
     green_sorted = sorted(green_words)
@@ -36,7 +37,7 @@ def render_result_page(
 
     green_items = render_list(green_sorted, "known", "无绿色单词")
     yellow_items = render_list(yellow_sorted, "proper", "无黄色单词")
-    red_items = render_list(red_sorted, "unknown", "无红色单词")
+    red_items = render_list(red_sorted, "unknown", "无进入释义表的单词")
 
     actions: list[str] = []
     if highlight_token and highlight_name:
@@ -63,10 +64,13 @@ def render_result_page(
         if translate_error
         else ""
     )
+    status_bits: list[str] = []
+    if saved_count:
+        status_bits.append(f"已写入对照表/大词典覆盖 <strong>{saved_count}</strong> 个词")
+    if removed_count:
+        status_bits.append(f"已从对照表剔除 <strong>{removed_count}</strong> 个词")
     saved_html = (
-        f'<p class="meta">已将 <strong>{saved_count}</strong> 个词写入 words.txt。</p>'
-        if saved_count
-        else ""
+        f'<p class="meta">{"；".join(status_bits)}。</p>' if status_bits else ""
     )
 
     return f"""<!DOCTYPE html>
@@ -162,7 +166,7 @@ def render_result_page(
     <div class="legend">
       <span class="known">绿 = 已掌握</span>
       <span class="proper">黄 = 不在大词典（ECDICT）</span>
-      <span class="unknown">红 = 未掌握（将查释义）</span>
+      <span class="unknown">进入释义表的词（红词确认 + 绿词勾选）</span>
     </div>
 
     <section class="panel">
@@ -178,7 +182,7 @@ def render_result_page(
       </ul>
     </section>
     <section class="panel">
-      <h2>红色（已确认保存）</h2>
+      <h2>进入释义表的词</h2>
       <ul>
 {red_items}
       </ul>
