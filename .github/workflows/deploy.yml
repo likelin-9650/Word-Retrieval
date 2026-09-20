@@ -1,56 +1,67 @@
-# GitHub Actions 会识别此路径：.github/workflows/deploy.yml
-# 当 main 分支有 push 时，SSH（私钥）到云服务器：
-# 必要时 clone → git pull → 更新依赖 → 重启 gunicorn 服务
+# GitHub Actions：在 Runner 上 checkout，再 SCP 到服务器安装重启
+# 避免服务器无法访问 github.com:443 导致 git clone/pull 超时
 
 name: Deploy to Server
 
 on:
   push:
     branches: [main]
-  workflow_dispatch: # 允许在 Actions 页手动触发
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy over SSH
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Pack project (exclude venv / local db / cache)
+        run: |
+          tar -czf word-retrieval-deploy.tar.gz \
+            --exclude='.venv' \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.cache' \
+            --exclude='dictionaries/ecdict.db' \
+            --exclude='dictionaries/ecdict.db-journal' \
+            --exclude='dictionaries/dict_extra.txt' \
+            --exclude='dictionaries/dict_exclude.txt' \
+            --exclude='.git' \
+            --exclude='word-retrieval-deploy.tar.gz' \
+            .
+
+      - name: SCP package to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "word-retrieval-deploy.tar.gz"
+          target: "/tmp/"
+          overwrite: true
+
+      - name: Install and restart on server
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          # 若用非 22 端口，在 Secrets 里加 SERVER_PORT，并取消下一行注释：
-          # port: ${{ secrets.SERVER_PORT }}
           script_stop: true
+          command_timeout: 30m
           script: |
             set -e
             DEPLOY_DIR="${{ secrets.DEPLOY_PATH }}"
             if [ -z "$DEPLOY_DIR" ]; then
               DEPLOY_DIR="$HOME/Word-Retrieval"
             fi
-            REPO_URL="https://github.com/likelin-9650/Word-Retrieval.git"
             echo "==> 部署目录: $DEPLOY_DIR"
+            mkdir -p "$DEPLOY_DIR"
 
-            if [ ! -d "$DEPLOY_DIR/.git" ]; then
-              echo "==> 目录不存在或不是 git 仓库，正在 clone…"
-              mkdir -p "$(dirname "$DEPLOY_DIR")"
-              if [ -d "$DEPLOY_DIR" ] && [ ! -d "$DEPLOY_DIR/.git" ]; then
-                if [ -z "$(ls -A "$DEPLOY_DIR" 2>/dev/null || true)" ]; then
-                  rmdir "$DEPLOY_DIR" 2>/dev/null || true
-                else
-                  echo "错误: $DEPLOY_DIR 已存在且不是 git 仓库，请清空或改 DEPLOY_PATH"
-                  exit 1
-                fi
-              fi
-              git clone "$REPO_URL" "$DEPLOY_DIR"
-            fi
+            echo "==> 解压代码（保留本地 .venv 与 ecdict.db）"
+            tar -xzf /tmp/word-retrieval-deploy.tar.gz -C "$DEPLOY_DIR"
+            rm -f /tmp/word-retrieval-deploy.tar.gz
 
             cd "$DEPLOY_DIR"
-
-            echo "==> 拉取最新代码"
-            git fetch origin main
-            git checkout main
-            git pull origin main
 
             echo "==> 更新 Python 依赖"
             if [ ! -d .venv ]; then
@@ -62,11 +73,16 @@ jobs:
             pip install -r requirements.txt
             pip install gunicorn
 
-            # ecdict.db 很大，日常部署不要每次重建。
-            # 仅当文件不存在时构建（首次部署）：
             if [ ! -f dictionaries/ecdict.db ]; then
-              echo "==> 未找到 ecdict.db，首次生成（较慢，可能需数分钟）…"
-              python build_ecdict_db.py
+              echo "==> 未找到 ecdict.db"
+              if python -c "import urllib.request; urllib.request.urlopen('https://github.com', timeout=8)" 2>/dev/null; then
+                echo "==> 可访问 GitHub，开始构建词典…"
+                python build_ecdict_db.py
+              else
+                echo "警告: 服务器访问 GitHub 超时，无法自动下载 ECDICT。"
+                echo "请在能访问 GitHub 的机器上运行 python build_ecdict_db.py，"
+                echo "再把 dictionaries/ecdict.db 上传到服务器对应目录。"
+              fi
             fi
 
             echo "==> 重启应用服务"
@@ -74,8 +90,7 @@ jobs:
               sudo systemctl restart word-retrieval
               sudo systemctl --no-pager --full status word-retrieval || true
             else
-              echo "警告: 未找到 word-retrieval.service"
-              echo "请先在服务器上创建 systemd 服务后再部署，或手动用 gunicorn 启动。"
+              echo "警告: 未找到 word-retrieval.service，请先创建 systemd 服务"
               exit 1
             fi
 
