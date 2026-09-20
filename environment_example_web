@@ -1,0 +1,68 @@
+# ═══════════════════════════════════════════
+# 安装 Node.js
+# ═══════════════════════════════════════════
+
+# 使用nvm（Node版本管理器）安装，方便切换版本
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# 重新加载配置
+source ~/.bashrc
+
+# 安装Node.js 20（LTS长期支持版）
+nvm install 20
+nvm use 20
+
+# 验证安装
+node -v    # 应该显示 v20.x.x
+npm -v     # 应该显示 10.x.x
+
+# ═══════════════════════════════════════════
+# 安装 MySQL 数据库
+# ═══════════════════════════════════════════
+
+sudo apt update
+sudo apt install mysql-server -y
+
+# 运行安全配置向导
+sudo mysql_secure_installation
+# 这个向导会问你几个问题：
+# → 设置root密码？ Yes，设一个强密码
+# → 删除匿名用户？ Yes
+# → 禁止root远程登录？ Yes
+# → 删除测试数据库？ Yes
+# → 重新加载权限表？ Yes
+
+# 登录MySQL，创建你的网站专用数据库和用户
+sudo mysql -u root -p
+
+# 在MySQL命令行里执行：
+CREATE DATABASE mysite_db CHARACTER SET utf8mb4;
+CREATE USER 'mysite_user'@'localhost' IDENTIFIED BY 'YourStr0ngP@ssw0rd';
+GRANT ALL PRIVILEGES ON mysite_db.* TO 'mysite_user'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+
+# ═══════════════════════════════════════════
+# 安装 Nginx（Web服务器）
+# ═══════════════════════════════════════════
+
+sudo apt install nginx -y
+
+# 启动Nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx  # 设置开机自启
+
+# 现在打开浏览器，输入你的服务器IP
+# 如果看到 "Welcome to nginx!" 页面
+# 说明Nginx安装成功了！
+
+# ═══════════════════════════════════════════
+# 安装 PM2（Node.js进程管理器）
+# ═══════════════════════════════════════════
+
+npm install -g pm2
+
+# PM2是什么？
+# 你的Node.js程序如果崩溃了，PM2会自动重启它。
+# 你关掉SSH终端，PM2会让程序继续在后台运行。
+# 就像给你的程序请了一个7×24小时的保姆。

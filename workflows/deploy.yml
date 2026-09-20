@@ -1,0 +1,45 @@
+# .github/workflows/deploy.yml
+# 放在你项目的这个路径下，GitHub会自动识别
+
+name: 自动部署到服务器
+
+# 什么时候触发？当main分支有新的push时
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest  # 在GitHub的服务器上执行
+    
+    steps:
+    # 第一步：拉取代码
+    - name: 拉取最新代码
+      uses: actions/checkout@v4
+    
+    # 第二步：安装Node.js
+    - name: 安装Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    # 第三步：安装依赖并运行测试
+    - name: 安装依赖
+      run: npm ci
+    
+    - name: 运行测试
+      run: npm test
+    
+    # 第四步：部署到服务器
+    - name: 部署到服务器
+      uses: appleboy/ssh-action@v1
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: deploy
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd /var/www/mysite
+          git pull origin main
+          npm ci --production
+          pm2 restart mysite
+          echo "部署完成！$(date)"
