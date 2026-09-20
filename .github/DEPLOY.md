@@ -30,8 +30,9 @@
 #   # 能输入密码登录后再跑 Actions
 #
 # 三、服务器其它准备：
-#   1. 已安装 Python、venv、Nginx、gunicorn、systemd
-#   2. 已 git clone 本仓库到 DEPLOY_PATH
+#   1. 已安装 Python3、python3-venv、git、（生产）Nginx / gunicorn / systemd
+#   2. 项目目录可不预先存在：工作流会在默认路径自动 git clone
+#      若代码已放在别处，请设置 Secret DEPLOY_PATH 为实际绝对路径
 #   3. 安全组放行 22 端口
 #   4. 部署用户可无密 sudo 重启服务，例如：
 #
@@ -40,6 +41,8 @@
 #      ubuntu ALL=(ALL) NOPASSWD: /bin/systemctl restart word-retrieval, /bin/systemctl status word-retrieval, /bin/systemctl is-active word-retrieval
 #
 #   5. systemd 服务名必须是 word-retrieval（与 deploy.yml 一致）
+#      首次 clone 后若还没有该服务，部署会在依赖装完后失败并提示；
+#      请先按部署教程建好 word-retrieval.service 再重新 Run workflow
 #
 # 四、安全提醒：
 #   - 密码存在 GitHub Secrets 中相对安全，但不如密钥登录稳妥
