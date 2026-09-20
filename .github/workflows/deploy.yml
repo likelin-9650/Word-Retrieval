@@ -1,5 +1,5 @@
 # GitHub Actions 会识别此路径：.github/workflows/deploy.yml
-# 当 main 分支有 push 时，SSH（用户名+密码）到云服务器：
+# 当 main 分支有 push 时，SSH（私钥）到云服务器：
 # 必要时 clone → git pull → 更新依赖 → 重启 gunicorn 服务
 
 name: Deploy to Server
@@ -18,7 +18,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           # 若用非 22 端口，在 Secrets 里加 SERVER_PORT，并取消下一行注释：
           # port: ${{ secrets.SERVER_PORT }}
           script_stop: true
@@ -35,7 +35,6 @@ jobs:
               echo "==> 目录不存在或不是 git 仓库，正在 clone…"
               mkdir -p "$(dirname "$DEPLOY_DIR")"
               if [ -d "$DEPLOY_DIR" ] && [ ! -d "$DEPLOY_DIR/.git" ]; then
-                # 空目录或非 git 目录：若为空则 clone 进去，否则报错避免误覆盖
                 if [ -z "$(ls -A "$DEPLOY_DIR" 2>/dev/null || true)" ]; then
                   rmdir "$DEPLOY_DIR" 2>/dev/null || true
                 else
