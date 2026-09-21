@@ -48,7 +48,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script_stop: true
-          command_timeout: 30m
+          command_timeout: 60m
           script: |
             set -e
             DEPLOY_DIR="${{ secrets.DEPLOY_PATH }}"
@@ -64,15 +64,15 @@ jobs:
 
             cd "$DEPLOY_DIR"
 
-            echo "==> 更新 Python 依赖"
+            echo "==> 更新 Python 依赖（清华 PyPI 镜像）"
+            PIP_MIRROR="https://pypi.tuna.tsinghua.edu.cn/simple"
             if [ ! -d .venv ]; then
               python3 -m venv .venv
             fi
             # shellcheck disable=SC1091
             source .venv/bin/activate
-            pip install -U pip
-            pip install -r requirements.txt
-            pip install gunicorn
+            pip install -U pip -i "$PIP_MIRROR"
+            pip install -r requirements.txt gunicorn -i "$PIP_MIRROR"
 
             if [ ! -f dictionaries/ecdict.db ]; then
               echo "==> 未找到 ecdict.db"

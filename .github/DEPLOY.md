@@ -24,7 +24,8 @@
 #   # 本机测通：ssh -i ./github_deploy USER@IP
 #
 # 四、服务器准备：
-#   1. Python3、python3-venv、git（可选）、Nginx、gunicorn、systemd
+#   1. Python3、python3-venv、Nginx、gunicorn、systemd
+#      pip 已配置使用清华镜像 https://pypi.tuna.tsinghua.edu.cn/simple
 #   2. 安全组放行 22
 #   3. 无密 sudo 重启 word-retrieval：
 #
