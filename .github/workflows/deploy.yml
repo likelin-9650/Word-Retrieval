@@ -17,7 +17,8 @@ jobs:
 
       - name: Pack project (exclude venv / local db / cache)
         run: |
-          tar -czf word-retrieval-deploy.tar.gz \
+          # 压缩包写到 /tmp，避免 tar 打包当前目录时读到自身变化而退出码 1
+          tar -czf /tmp/word-retrieval-deploy.tar.gz \
             --exclude='.venv' \
             --exclude='__pycache__' \
             --exclude='*.pyc' \
@@ -27,8 +28,8 @@ jobs:
             --exclude='dictionaries/dict_extra.txt' \
             --exclude='dictionaries/dict_exclude.txt' \
             --exclude='.git' \
-            --exclude='word-retrieval-deploy.tar.gz' \
-            .
+            -C "$GITHUB_WORKSPACE" .
+          cp /tmp/word-retrieval-deploy.tar.gz "$GITHUB_WORKSPACE/word-retrieval-deploy.tar.gz"
 
       - name: SCP package to server
         uses: appleboy/scp-action@v0.1.7
