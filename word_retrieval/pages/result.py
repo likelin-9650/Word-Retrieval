@@ -83,8 +83,8 @@ def render_result_page(
         if status_bits
         else '<p class="meta">未改动本机对照表/词典差分。</p>'
     )
-    # 供前端写入 localStorage；用 script type=application/json 避免 XSS 执行
-    safe_json = html.escape(user_data_json or "{}", quote=True)
+    # script 内直接放 JSON；转义 < 防止打断标签。勿用 html.escape（&quot; 在 script 中不会解码）
+    safe_json = (user_data_json or "{}").replace("<", "\\u003c")
     footer = icp_footer_html()
 
     return f"""<!DOCTYPE html>

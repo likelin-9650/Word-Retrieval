@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import html
 import json
 
 from flask import url_for
@@ -17,7 +16,10 @@ def render_settings_page(
     home = url_for("main.index")
     parse_api = url_for("main.api_parse_wordlist")
     static_js = url_for("static", filename="user_data.js")
-    baseline_json = json.dumps(baseline_wordlists, ensure_ascii=False)
+    # 勿对 script 内 JSON 使用 html.escape：script 数据态不解码 &quot;，会导致 JSON.parse 失败
+    baseline_json = json.dumps(baseline_wordlists, ensure_ascii=False).replace(
+        "<", "\\u003c"
+    )
     footer = icp_footer_html()
 
     return f"""<!DOCTYPE html>
@@ -174,12 +176,19 @@ def render_settings_page(
     </section>
   </main>
   {footer}
-  <script type="application/json" id="baseline-wordlists">{html.escape(baseline_json)}</script>
+  <script type="application/json" id="baseline-wordlists">{baseline_json}</script>
   <script src="{static_js}"></script>
   <script>
     const PARSE_API = {json.dumps(parse_api)};
     const baselineEl = document.getElementById("baseline-wordlists");
-    const BASELINE = JSON.parse(baselineEl.textContent || "[]");
+    let BASELINE = [];
+    try {{
+      BASELINE = JSON.parse((baselineEl && baselineEl.textContent) || "[]");
+      if (!Array.isArray(BASELINE)) BASELINE = [];
+    }} catch (err) {{
+      console.warn("无法解析基准对照表列表", err);
+      BASELINE = [];
+    }}
     const statusLine = document.getElementById("statusLine");
     const summary = document.getElementById("summary");
 
