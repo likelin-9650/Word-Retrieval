@@ -22,6 +22,7 @@ def render_result_page(
     translate_error: str | None = None,
     saved_count: int = 0,
     removed_count: int = 0,
+    user_data_json: str = "",
 ) -> str:
     """生成展示提取结果的 HTML 页面。"""
     green_sorted = sorted(green_words)
@@ -68,12 +69,22 @@ def render_result_page(
     )
     status_bits: list[str] = []
     if saved_count:
-        status_bits.append(f"已写入对照表/大词典覆盖 <strong>{saved_count}</strong> 个词")
+        status_bits.append(
+            f"已保存到<strong>本浏览器</strong>：对照表/词典增补 "
+            f"<strong>{saved_count}</strong> 个词"
+        )
     if removed_count:
-        status_bits.append(f"已从对照表剔除 <strong>{removed_count}</strong> 个词")
+        status_bits.append(
+            f"已从本机对照表差分剔除 <strong>{removed_count}</strong> 个词"
+        )
     saved_html = (
-        f'<p class="meta">{"；".join(status_bits)}。</p>' if status_bits else ""
+        f'<p class="meta">{"；".join(status_bits)}。'
+        f"服务器仍只保留基准 ECDICT 与默认对照表。</p>"
+        if status_bits
+        else '<p class="meta">未改动本机对照表/词典差分。</p>'
     )
+    # 供前端写入 localStorage；用 script type=application/json 避免 XSS 执行
+    safe_json = html.escape(user_data_json or "{}", quote=True)
     footer = icp_footer_html()
 
     return f"""<!DOCTYPE html>
@@ -193,6 +204,15 @@ def render_result_page(
     </section>
   </main>
   {footer}
+  <script type="application/json" id="user-data-payload">{safe_json}</script>
+  <script src="{url_for('static', filename='user_data.js')}"></script>
+  <script>
+    (function () {{
+      const el = document.getElementById("user-data-payload");
+      if (!el || !window.UserDataStore) return;
+      UserDataStore.applyServerPayload(el.textContent || "{{}}");
+    }})();
+  </script>
 </body>
 </html>
 """

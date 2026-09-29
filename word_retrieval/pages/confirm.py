@@ -176,7 +176,7 @@ def render_confirm_page(
 
       <section class="panel" data-group="green">
         <h2 style="color:var(--known)">绿色词 — 释义表与剔出对照表分开选择</h2>
-        <p class="hint">这些词已在对照表中。「进入释义表」会写入本次释义表；「剔出对照表」会从当前对照表删除该词。两项均默认不勾选。</p>
+        <p class="hint">这些词已在对照表中。「进入释义表」会写入本次释义表；「剔出对照表」会从<strong>本浏览器</strong>对照表差分中删除该词。两项均默认不勾选。</p>
         <div class="toolbar">
           <button type="button" data-action="vocab-all">释义表全选</button>
           <button type="button" data-action="vocab-none">释义表全不选</button>
@@ -188,7 +188,7 @@ def render_confirm_page(
 
       <section class="panel" data-group="yellow">
         <h2 style="color:var(--proper)">黄色词 — 可加入对照表 / 大词典（ECDICT 增补） / 二者都加</h2>
-        <p class="hint">每个词可单独勾选目标；两者都勾选即同时加入。</p>
+        <p class="hint">每个词可单独勾选目标；两者都勾选即同时加入。<strong>写入本浏览器</strong>，不改服务器基准文件。</p>
         <div class="toolbar">
           <button type="button" data-action="words-all">对照表全选</button>
           <button type="button" data-action="words-none">对照表全不选</button>
@@ -200,7 +200,7 @@ def render_confirm_page(
 
       <section class="panel" data-group="red">
         <h2 style="color:var(--unknown)">红色词 — 释义表与对照表分开选择</h2>
-        <p class="hint">「进入释义表」默认勾选；「加入对照表」默认不勾选，可另选保存。释义来自本地 ECDICT。</p>
+        <p class="hint">「进入释义表」默认勾选；「加入对照表」默认不勾选（保存到本浏览器）。释义来自服务器 ECDICT。</p>
         <div class="toolbar">
           <button type="button" data-action="keep-all">释义表全选</button>
           <button type="button" data-action="keep-none">释义表全不选</button>

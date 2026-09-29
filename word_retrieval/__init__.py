@@ -10,7 +10,11 @@ PROJECT_ROOT = PACKAGE_DIR.parent
 
 def create_app() -> Flask:
     """创建并配置 Flask 应用。"""
-    app = Flask(__name__)
+    app = Flask(
+        __name__,
+        static_folder="static",
+        static_url_path="/static",
+    )
     app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16 MB
     app.config["PROJECT_ROOT"] = PROJECT_ROOT
     app.config["INDEX_HTML"] = PROJECT_ROOT / "index.html"
@@ -20,6 +24,7 @@ def create_app() -> Flask:
     app.config["SCOWL_WORDS"] = PROJECT_ROOT / "scowl_words.txt"
     app.config["DOWNLOAD_DIR"] = PROJECT_ROOT / ".cache" / "downloads"
     app.config["ECDICT_DB"] = PROJECT_ROOT / "dictionaries" / "ecdict.db"
+    # 服务器仍可保留空覆盖文件；网页用户改动写入浏览器，不再写这些共享文件
     app.config["DICT_EXTRA"] = PROJECT_ROOT / "dictionaries" / "dict_extra.txt"
     app.config["DICT_EXCLUDE"] = PROJECT_ROOT / "dictionaries" / "dict_exclude.txt"
     # 此处可以改造接入百度翻译 API：

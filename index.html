@@ -167,6 +167,7 @@
     </div>
     <p class="lead">
       上传 Word 或直接输入文章：提取后按绿/黄/红分类，人工确认后再下载标注文档与本地词典释义表。
+      对照表与词典的个人改动保存在本浏览器，服务器只提供基准 ECDICT 与默认对照表。
     </p>
     <p class="hint" id="serverHint" hidden style="color:#a33;margin-bottom:1rem;"></p>
 
@@ -176,7 +177,7 @@
         <select id="wordlist" name="wordlist">
           <!--WORDLIST_OPTIONS-->
         </select>
-        <p class="hint">对照表位于 wordlists/ 文件夹，可在设置中新增或编辑。如果添加了新的对照表但没有显示，请刷新网页后再试。</p>
+        <p class="hint">对照表：服务器提供基准表；你在设置中的改动与自建表保存在本浏览器。若自建表未显示，请刷新页面。</p>
       </div>
 
       <div>
@@ -210,6 +211,8 @@
     <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026058519号</a>
   </footer>
 
+  <script type="application/json" id="baseline-wordlists"><!--BASELINE_WORDLISTS_JSON--></script>
+  <script src="/static/user_data.js"></script>
   <script>
     const input = document.getElementById("document");
     const article = document.getElementById("article");
@@ -217,6 +220,22 @@
     const form = document.getElementById("uploadForm");
     const hint = document.getElementById("serverHint");
     const submitBtn = document.getElementById("submitBtn");
+    const wordlistSelect = document.getElementById("wordlist");
+
+    const baselineEl = document.getElementById("baseline-wordlists");
+    let baseline = [];
+    try {
+      baseline = JSON.parse(baselineEl.textContent || "[]");
+    } catch (_) {
+      baseline = [];
+    }
+    if (window.UserDataStore) {
+      UserDataStore.mergeWordlistOptions(wordlistSelect, baseline);
+      UserDataStore.attachHiddenField(form, "user_data");
+      wordlistSelect.addEventListener("change", () => {
+        UserDataStore.setSelected(wordlistSelect.value);
+      });
+    }
 
     if (location.protocol === "file:") {
       hint.hidden = false;
