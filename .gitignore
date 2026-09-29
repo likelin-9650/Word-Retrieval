@@ -16,3 +16,10 @@ run_baidu_vocab.py
 Baidu_Text_transAPI.py
 word_retrieval/baidu_translate.py
 api_demo_Baidu_Text_transAPI.rar
+
+# 本地资料与交接文档，不上传
+报错记录/
+临时配置修改/
+word/
+test/
+HANDOFF.md

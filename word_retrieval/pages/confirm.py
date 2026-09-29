@@ -6,6 +6,8 @@ import html
 
 from flask import url_for
 
+from word_retrieval.pages import ICP_FOOTER_CSS, icp_footer_html
+
 
 def _dual_target_yellow_list(words: list[str]) -> str:
     if not words:
@@ -73,6 +75,7 @@ def render_confirm_page(
     total = len(green_sorted) + len(yellow_sorted) + len(red_sorted)
     home = url_for("main.index")
     action = url_for("main.confirm")
+    footer = icp_footer_html()
 
     green_html = _green_list(green_sorted)
     yellow_html = _dual_target_yellow_list(yellow_sorted)
@@ -153,6 +156,7 @@ def render_confirm_page(
     @media (max-width: 640px) {{
       .word-row {{ grid-template-columns: 1fr; gap: 0.3rem; }}
     }}
+{ICP_FOOTER_CSS}
   </style>
 </head>
 <body>
@@ -212,6 +216,7 @@ def render_confirm_page(
       </div>
     </form>
   </main>
+  {footer}
   <script>
     document.querySelectorAll('.panel[data-group="green"]').forEach((panel) => {{
       panel.querySelectorAll("button[data-action]").forEach((btn) => {{

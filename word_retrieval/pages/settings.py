@@ -6,6 +6,8 @@ import html
 
 from flask import url_for
 
+from word_retrieval.pages import ICP_FOOTER_CSS, icp_footer_html
+
 
 def render_settings_page(
     *,
@@ -24,6 +26,7 @@ def render_settings_page(
     )
     msg_html = f'<p class="ok">{html.escape(message)}</p>' if message else ""
     err_html = f'<p class="error">{html.escape(error)}</p>' if error else ""
+    footer = icp_footer_html()
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -89,6 +92,7 @@ def render_settings_page(
     button.danger {{ background: var(--danger); }}
     .ok {{ color: var(--accent); }}
     .error {{ color: var(--danger); }}
+{ICP_FOOTER_CSS}
   </style>
 </head>
 <body>
@@ -179,6 +183,7 @@ def render_settings_page(
       </form>
     </section>
   </main>
+  {footer}
 </body>
 </html>
 """

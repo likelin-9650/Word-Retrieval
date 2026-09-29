@@ -6,6 +6,8 @@ import html
 
 from flask import url_for
 
+from word_retrieval.pages import ICP_FOOTER_CSS, icp_footer_html
+
 
 def render_result_page(
     source_label: str,
@@ -72,6 +74,7 @@ def render_result_page(
     saved_html = (
         f'<p class="meta">{"；".join(status_bits)}。</p>' if status_bits else ""
     )
+    footer = icp_footer_html()
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -141,6 +144,7 @@ def render_result_page(
       list-style: none; margin-left: -1.2rem; color: var(--muted);
     }}
     @media (max-width: 560px) {{ ul {{ columns: 1; }} }}
+{ICP_FOOTER_CSS}
   </style>
 </head>
 <body>
@@ -188,6 +192,7 @@ def render_result_page(
       </ul>
     </section>
   </main>
+  {footer}
 </body>
 </html>
 """

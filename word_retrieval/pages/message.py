@@ -6,10 +6,13 @@ import html
 
 from flask import url_for
 
+from word_retrieval.pages import ICP_FOOTER_CSS, icp_footer_html
+
 
 def render_message_page(title: str, message: str, status: int = 400):
     """生成简单提示页面。"""
     home = url_for("main.index")
+    footer = icp_footer_html()
     body = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -34,6 +37,7 @@ def render_message_page(title: str, message: str, status: int = 400):
       padding: 1.4rem;
     }}
     a {{ color: #0f6a5c; font-weight: 600; }}
+{ICP_FOOTER_CSS}
   </style>
 </head>
 <body>
@@ -42,6 +46,7 @@ def render_message_page(title: str, message: str, status: int = 400):
     <p>{html.escape(message)}</p>
     <p><a href="{home}">← 返回重新上传</a></p>
   </main>
+  {footer}
 </body>
 </html>
 """

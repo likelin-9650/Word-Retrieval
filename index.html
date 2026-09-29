@@ -141,6 +141,22 @@
       font-size: 0.9rem;
       color: var(--accent);
     }
+
+    .site-footer {
+      width: min(640px, 100%);
+      margin-top: 1.75rem;
+      padding: 0.25rem 0 0.5rem;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .site-footer a {
+      color: var(--muted);
+      text-decoration: none;
+      font-weight: 400;
+    }
+    .site-footer a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -189,6 +205,10 @@
       <button type="submit" id="submitBtn">提交并提取单词</button>
     </form>
   </main>
+
+  <footer class="site-footer">
+    <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026058519号</a>
+  </footer>
 
   <script>
     const input = document.getElementById("document");
