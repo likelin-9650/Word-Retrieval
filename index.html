@@ -151,12 +151,28 @@
       color: var(--muted);
       line-height: 1.5;
     }
+    .site-footer .beian-lines {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 0.35rem 1.1rem;
+    }
     .site-footer a {
       color: var(--muted);
       text-decoration: none;
       font-weight: 400;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
     }
     .site-footer a:hover { text-decoration: underline; }
+    .site-footer .beian-icon {
+      width: 16px;
+      height: 16px;
+      vertical-align: middle;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -208,7 +224,12 @@
   </main>
 
   <footer class="site-footer">
-    <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026058519号</a>
+    <div class="beian-lines">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026058519号</a>
+      <a href="https://beian.mps.gov.cn/#/query/webSearch?code=51070302110809" rel="noreferrer" target="_blank">
+        <img class="beian-icon" src="/static/beian-mps.png" alt="" width="16" height="16" />川公网安备51070302110809号
+      </a>
+    </div>
   </footer>
 
   <script type="application/json" id="baseline-wordlists"><!--BASELINE_WORDLISTS_JSON--></script>

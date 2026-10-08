@@ -117,8 +117,8 @@ def render_settings_page(
     </section>
 
     <section class="panel">
-      <h2>编辑对照表（本机差分）</h2>
-      <p class="hint">对服务器基准表的修改记为差分；自建表直接改本机全文。</p>
+      <h2>编辑对照表（本机存放）</h2>
+      <p class="hint">对服务器基准表的修改记为差分，保存在当前浏览器（localStorage）；自建表全文也只存本浏览器，不会写入服务器文件。</p>
       <label for="wordlist">选择对照表</label>
       <select id="wordlist"></select>
       <label for="list_add">添加单词（每行一个）</label>
@@ -151,7 +151,7 @@ def render_settings_page(
       <input id="wordlist_file" type="file" accept=".txt,text/plain" />
       <label class="check">
         <input type="checkbox" id="add_inflections" value="1" />
-        添加派生词（屈折变化，由服务器用 lemminflect 扩展）
+        添加派生词
       </label>
       <div class="row"><button type="button" id="btnUpload">上传并保存到本机</button></div>
     </section>
@@ -160,7 +160,7 @@ def render_settings_page(
       <h2>删除本机自建对照表</h2>
       <label for="del_list">选择对照表</label>
       <select id="del_list"></select>
-      <p class="hint">只能删除本机自建表；服务器基准表（如 words.txt）不可删，但可用上方差分剔除单词。</p>
+      <p class="hint">只能删除本机自建表；服务器基准表（如 words.txt）不可删，但可用上方编辑把增删差分保存在本浏览器。</p>
       <div class="row"><button class="danger" type="button" id="btnDelete">删除本机对照表</button></div>
     </section>
 

@@ -78,8 +78,7 @@ def render_result_page(
             f"已从本机对照表差分剔除 <strong>{removed_count}</strong> 个词"
         )
     saved_html = (
-        f'<p class="meta">{"；".join(status_bits)}。'
-        f"服务器仍只保留基准 ECDICT 与默认对照表。</p>"
+        f'<p class="meta">{"；".join(status_bits)}。</p>'
         if status_bits
         else '<p class="meta">未改动本机对照表/词典差分。</p>'
     )
