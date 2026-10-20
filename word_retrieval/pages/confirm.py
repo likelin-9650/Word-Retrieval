@@ -17,10 +17,31 @@ def _dual_target_yellow_list(words: list[str]) -> str:
         w = html.escape(word)
         wid = html.escape(word, quote=True)
         items.append(
-            f'<div class="word-row proper">'
+            f'<div class="word-block proper" data-word="{wid}">'
+            f'<div class="word-row">'
             f'<span class="term">{w}</span>'
             f'<label><input type="checkbox" name="yellow_to_words" value="{wid}" />对照表</label>'
-            f'<label><input type="checkbox" name="yellow_to_dict" value="{wid}" />大词典</label>'
+            f'<label><input type="checkbox" name="yellow_to_dict" value="{wid}" '
+            f'class="dict-toggle" />大词典</label>'
+            f"</div>"
+            f'<div class="dict-fields" hidden>'
+            f'<p class="field-hint">加入大词典须填写与 ECDICT 对齐的词条：'
+            f'<strong>中文释义、词性必填</strong>；音标、英文释义、词形变化可选。</p>'
+            f'<label>中文释义 <span class="req">*</span>'
+            f'<textarea class="dict-translation" rows="2" '
+            f'placeholder="n. 释义一行一项"></textarea></label>'
+            f'<div class="field-grid">'
+            f'<label>词性 <span class="req">*</span>'
+            f'<input type="text" class="dict-pos" placeholder="如 n. / v. / adj." /></label>'
+            f'<label>音标'
+            f'<input type="text" class="dict-phonetic" placeholder="如 ˈæpl 或 /ˈæpl/" /></label>'
+            f'<label>词形变化'
+            f'<input type="text" class="dict-exchange" placeholder="如 s:apples/p:apple" /></label>'
+            f"</div>"
+            f'<label>英文释义'
+            f'<textarea class="dict-definition" rows="2" '
+            f'placeholder="可选，英文义项"></textarea></label>'
+            f"</div>"
             f"</div>"
         )
     return '<div class="word-rows">\n' + "\n".join(items) + "\n</div>"
@@ -132,6 +153,10 @@ def render_confirm_page(
       gap: 0.35rem 0.6rem;
     }}
     .word-rows {{ display: grid; gap: 0.45rem; }}
+    .word-block {{
+      border-bottom: 1px solid rgba(197, 210, 218, 0.55);
+      padding-bottom: 0.45rem;
+    }}
     .word-row {{
       display: grid;
       grid-template-columns: minmax(100px, 1.2fr) auto auto;
@@ -140,11 +165,40 @@ def render_confirm_page(
       padding: 0.35rem 0.45rem;
       border-bottom: 1px solid rgba(197, 210, 218, 0.55);
     }}
+    .word-block .word-row {{ border-bottom: 0; }}
     .word-row .term {{ font-weight: 600; }}
-    .word-row.known .term {{ color: var(--known); }}
-    .word-row.proper .term {{ color: var(--proper); }}
-    .word-row.unknown .term {{ color: var(--unknown); }}
+    .word-row.known .term, .word-block.known .term {{ color: var(--known); }}
+    .word-row.proper .term, .word-block.proper .term {{ color: var(--proper); }}
+    .word-row.unknown .term, .word-block.unknown .term {{ color: var(--unknown); }}
+    .dict-fields {{
+      margin: 0.25rem 0.45rem 0.55rem;
+      padding: 0.75rem 0.85rem;
+      background: rgba(196, 160, 0, 0.08);
+      border: 1px solid rgba(196, 160, 0, 0.28);
+      display: grid;
+      gap: 0.55rem;
+    }}
+    .dict-fields .field-hint {{
+      margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45;
+    }}
+    .dict-fields .req {{ color: var(--unknown); }}
+    .dict-fields label {{
+      display: grid; gap: 0.25rem; font-size: 0.88rem; font-weight: 600;
+    }}
+    .dict-fields input, .dict-fields textarea {{
+      width: 100%; font: inherit; font-weight: 400; padding: 0.45rem 0.55rem;
+      border: 1px solid var(--line); background: #fff;
+    }}
+    .dict-fields textarea {{ resize: vertical; }}
+    .field-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.55rem;
+    }}
     .empty {{ color: var(--muted); margin: 0; }}
+    .form-error {{
+      color: var(--unknown); margin: 0.6rem 0 0; font-size: 0.92rem; display: none;
+    }}
     .actions {{
       display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; margin-top: 1rem;
     }}
@@ -188,7 +242,7 @@ def render_confirm_page(
 
       <section class="panel" data-group="yellow">
         <h2 style="color:var(--proper)">黄色词 — 可加入对照表 / 大词典（ECDICT 增补） / 二者都加</h2>
-        <p class="hint">每个词可单独勾选目标；两者都勾选即同时加入。<strong>写入本浏览器</strong>，不改服务器基准文件。</p>
+        <p class="hint">每个词可单独勾选目标；两者都勾选即同时加入。<strong>写入本浏览器</strong>，不改服务器基准文件。勾选「大词典」时须填写<strong>中文释义与词性</strong>（音标、英文释义、词形变化可选）。</p>
         <div class="toolbar">
           <button type="button" data-action="words-all">对照表全选</button>
           <button type="button" data-action="words-none">对照表全不选</button>
@@ -210,6 +264,8 @@ def render_confirm_page(
         {red_html}
       </section>
 
+      <input type="hidden" name="yellow_dict_entries" id="yellow_dict_entries" value="[]" />
+      <p class="form-error" id="formError"></p>
       <div class="actions">
         <button class="submit" type="submit">确认并生成文档</button>
         <a href="{home}">← 返回重来</a>
@@ -238,8 +294,22 @@ def render_confirm_page(
       }});
     }});
 
+    function syncDictFields(block) {{
+      const toggle = block.querySelector(".dict-toggle");
+      const fields = block.querySelector(".dict-fields");
+      if (!toggle || !fields) return;
+      fields.hidden = !toggle.checked;
+    }}
+
     const yellowPanel = document.querySelector('.panel[data-group="yellow"]');
     if (yellowPanel) {{
+      yellowPanel.querySelectorAll(".word-block").forEach((block) => {{
+        const toggle = block.querySelector(".dict-toggle");
+        if (toggle) {{
+          toggle.addEventListener("change", () => syncDictFields(block));
+          syncDictFields(block);
+        }}
+      }});
       yellowPanel.querySelectorAll("button[data-action]").forEach((btn) => {{
         btn.addEventListener("click", () => {{
           const action = btn.getAttribute("data-action");
@@ -249,7 +319,11 @@ def render_confirm_page(
           }}
           if (action === "dict-all" || action === "dict-none") {{
             const on = action === "dict-all";
-            yellowPanel.querySelectorAll('input[name="yellow_to_dict"]').forEach((b) => b.checked = on);
+            yellowPanel.querySelectorAll('input[name="yellow_to_dict"]').forEach((b) => {{
+              b.checked = on;
+              const block = b.closest(".word-block");
+              if (block) syncDictFields(block);
+            }});
           }}
         }});
       }});
@@ -269,6 +343,49 @@ def render_confirm_page(
             redPanel.querySelectorAll('input[name="red_to_words"]').forEach((b) => b.checked = on);
           }}
         }});
+      }});
+    }}
+
+    const confirmForm = document.querySelector("form");
+    const formError = document.getElementById("formError");
+    const entriesInput = document.getElementById("yellow_dict_entries");
+    if (confirmForm && entriesInput) {{
+      confirmForm.addEventListener("submit", (ev) => {{
+        const entries = [];
+        const missing = [];
+        document.querySelectorAll('.panel[data-group="yellow"] .word-block').forEach((block) => {{
+          const toggle = block.querySelector(".dict-toggle");
+          if (!toggle || !toggle.checked) return;
+          const word = (block.getAttribute("data-word") || toggle.value || "").trim().toLowerCase();
+          const translation = (block.querySelector(".dict-translation")?.value || "").trim();
+          const pos = (block.querySelector(".dict-pos")?.value || "").trim();
+          const phonetic = (block.querySelector(".dict-phonetic")?.value || "").trim();
+          const definition = (block.querySelector(".dict-definition")?.value || "").trim();
+          const exchange = (block.querySelector(".dict-exchange")?.value || "").trim();
+          if (!translation || !pos) {{
+            missing.push(word);
+            return;
+          }}
+          entries.push({{
+            word,
+            translation,
+            pos,
+            phonetic,
+            definition,
+            exchange,
+          }});
+        }});
+        if (missing.length) {{
+          ev.preventDefault();
+          formError.style.display = "block";
+          formError.textContent =
+            "勾选「大词典」的词须填写中文释义与词性：" + missing.slice(0, 8).join("、")
+            + (missing.length > 8 ? "…" : "");
+          return;
+        }}
+        formError.style.display = "none";
+        formError.textContent = "";
+        entriesInput.value = JSON.stringify(entries);
       }});
     }}
   </script>

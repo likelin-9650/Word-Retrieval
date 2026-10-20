@@ -15,7 +15,7 @@ def render_settings_page(
 ) -> str:
     home = url_for("main.index")
     parse_api = url_for("main.api_parse_wordlist")
-    static_js = url_for("static", filename="user_data.js")
+    static_js = url_for("static", filename="user_data.js") + "?v=2"
     # 勿对 script 内 JSON 使用 html.escape：script 数据态不解码 &quot;，会导致 JSON.parse 失败
     baseline_json = json.dumps(baseline_wordlists, ensure_ascii=False).replace(
         "<", "\\u003c"
@@ -107,13 +107,27 @@ def render_settings_page(
     <section class="panel">
       <h2>编辑大词典覆盖（本机）</h2>
       <p class="hint">
-        基础词表为服务器 ECDICT。「添加」写入本机增补；「排除」写入本机排除表。
+        基础词表为服务器 ECDICT。增补写入完整词条（与 ECDICT 字段对齐）：
+        <strong>中文释义、词性必填</strong>；音标、英文释义、词形变化可选。
+        「排除」只填词头即可。
       </p>
-      <label for="dict_add">添加单词（每行一个）</label>
-      <textarea id="dict_add" placeholder="apple&#10;banana"></textarea>
+      <label for="dict_word">单词 <span style="color:var(--danger)">*</span></label>
+      <input id="dict_word" type="text" placeholder="apple" />
+      <label for="dict_translation">中文释义 <span style="color:var(--danger)">*</span></label>
+      <textarea id="dict_translation" placeholder="n. 苹果"></textarea>
+      <label for="dict_pos">词性 <span style="color:var(--danger)">*</span></label>
+      <input id="dict_pos" type="text" placeholder="n." />
+      <label for="dict_phonetic">音标（可选）</label>
+      <input id="dict_phonetic" type="text" placeholder="ˈæpl" />
+      <label for="dict_definition">英文释义（可选）</label>
+      <textarea id="dict_definition" placeholder="a round fruit"></textarea>
+      <label for="dict_exchange">词形变化（可选）</label>
+      <input id="dict_exchange" type="text" placeholder="s:apples" />
+      <div class="row"><button type="button" id="btnDictAdd">保存本机增补词条</button></div>
+      <p class="hint" id="dictExtraList" style="white-space:pre-wrap;margin-top:0.9rem;"></p>
       <label for="dict_remove">排除单词（每行一个）</label>
       <textarea id="dict_remove" placeholder="obsoleteword"></textarea>
-      <div class="row"><button type="button" id="btnDict">更新本机词典覆盖</button></div>
+      <div class="row"><button type="button" id="btnDictExclude" class="danger">更新本机排除</button></div>
     </section>
 
     <section class="panel">
@@ -203,6 +217,23 @@ def render_settings_page(
       );
     }}
 
+    function renderDictExtraList(data) {{
+      const el = document.getElementById("dictExtraList");
+      if (!el) return;
+      const extras = data.dict_extra || [];
+      if (!extras.length) {{
+        el.textContent = "当前本机尚无增补词条。";
+        return;
+      }}
+      const lines = extras.slice(0, 40).map((e) => {{
+        const gloss = (e.translation || "").replace(/\\s+/g, " ").slice(0, 40);
+        return `${{e.word}} [${{e.pos || "?"}}] ${{gloss || "（无中文释义）"}}`;
+      }});
+      let text = "已存增补 " + extras.length + " 条：\\n" + lines.join("\\n");
+      if (extras.length > 40) text += "\\n…";
+      el.textContent = text;
+    }}
+
     function refresh() {{
       summary.textContent = UserDataStore.summaryText();
       UserDataStore.mergeWordlistOptions(
@@ -210,6 +241,7 @@ def render_settings_page(
         BASELINE
       );
       const data = UserDataStore.load();
+      renderDictExtraList(data);
       const del = document.getElementById("del_list");
       del.innerHTML = "";
       const customs = Object.keys(data.custom_lists).sort();
@@ -238,30 +270,58 @@ def render_settings_page(
       return name + ".txt";
     }}
 
-    document.getElementById("btnDict").addEventListener("click", () => {{
+    function clearDictEntryForm() {{
+      ["dict_word", "dict_translation", "dict_pos", "dict_phonetic",
+       "dict_definition", "dict_exchange"].forEach((id) => {{
+        const el = document.getElementById(id);
+        if (el) el.value = "";
+      }});
+    }}
+
+    document.getElementById("btnDictAdd").addEventListener("click", () => {{
       try {{
         const data = UserDataStore.load();
-        const add = new Set(parseLines(document.getElementById("dict_add").value));
+        const entry = UserDataStore.normalizeDictEntry({{
+          word: document.getElementById("dict_word").value,
+          translation: document.getElementById("dict_translation").value,
+          pos: document.getElementById("dict_pos").value,
+          phonetic: document.getElementById("dict_phonetic").value,
+          definition: document.getElementById("dict_definition").value,
+          exchange: document.getElementById("dict_exchange").value,
+        }}, true);
+        const byWord = {{}};
+        (data.dict_extra || []).forEach((e) => {{ byWord[e.word] = e; }});
+        const isNew = !byWord[entry.word];
+        byWord[entry.word] = entry;
+        data.dict_extra = Object.keys(byWord).sort().map((k) => byWord[k]);
+        data.dict_exclude = (data.dict_exclude || []).filter((w) => w !== entry.word);
+        UserDataStore.save(data);
+        clearDictEntryForm();
+        setStatus(isNew
+          ? "已新增本机词条：" + entry.word
+          : "已更新本机词条：" + entry.word);
+        refresh();
+      }} catch (err) {{
+        setStatus(String(err.message || err), true);
+      }}
+    }});
+
+    document.getElementById("btnDictExclude").addEventListener("click", () => {{
+      try {{
+        const data = UserDataStore.load();
         const remove = new Set(parseLines(document.getElementById("dict_remove").value));
-        const extra = new Set(data.dict_extra);
-        const exclude = new Set(data.dict_exclude);
-        let added = 0, excluded = 0;
-        add.forEach((w) => {{
-          if (!extra.has(w)) added += 1;
-          extra.add(w);
-          exclude.delete(w);
-        }});
+        if (!remove.size) throw new Error("请填写要排除的单词。");
+        const exclude = new Set(data.dict_exclude || []);
+        let excluded = 0;
         remove.forEach((w) => {{
-          extra.delete(w);
           if (!exclude.has(w)) excluded += 1;
           exclude.add(w);
         }});
-        data.dict_extra = Array.from(extra).sort();
+        data.dict_extra = (data.dict_extra || []).filter((e) => !remove.has(e.word));
         data.dict_exclude = Array.from(exclude).sort();
         UserDataStore.save(data);
-        document.getElementById("dict_add").value = "";
         document.getElementById("dict_remove").value = "";
-        setStatus(`本机词典覆盖已更新：增补 ${{added}}，排除 ${{excluded}}。`);
+        setStatus(`本机排除已更新：新增排除 ${{excluded}}；并从增补中移除同名词条。`);
         refresh();
       }} catch (err) {{
         setStatus(String(err.message || err), true);

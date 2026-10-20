@@ -38,6 +38,9 @@ class DictEntry:
         pos = (self.pos or "").strip()
         if pos:
             lines.append(f"[{pos}]")
+        exchange = (self.exchange or "").strip()
+        if exchange:
+            lines.append(f"（词形：{exchange}）")
         lines.extend(_split_field(self.translation))
         if include_english:
             eng = _split_field(self.definition)
@@ -152,23 +155,51 @@ class Ecdict:
         return {w.strip().lower(): self.lookup(w) for w in words if w.strip()}
 
 
+def entry_from_client(raw: dict) -> DictEntry:
+    """将本机增补词条转为 DictEntry（字段与 ECDICT 对齐）。"""
+    word = str(raw.get("word") or "").strip().lower()
+    return DictEntry(
+        word=word,
+        phonetic=str(raw.get("phonetic") or "").strip(),
+        definition=str(raw.get("definition") or "").strip(),
+        translation=str(raw.get("translation") or "").strip(),
+        pos=str(raw.get("pos") or "").strip(),
+        exchange=str(raw.get("exchange") or "").strip(),
+        matched_as=word,
+    )
+
+
 def lookup_definitions(
     words: list[str],
     db_path: Path,
     *,
     include_english: bool = False,
+    client_entries: dict[str, dict] | None = None,
 ) -> dict[str, str]:
     """
     批量查词，返回 {小写词: 格式化释义}。
     未命中时值为空字符串。
+    client_entries：本机 ECDICT 增补；若该词有非空中文释义则优先于服务器 ECDICT。
     """
     if not words:
         return {}
+    overlay = {
+        str(k).strip().lower(): v
+        for k, v in (client_entries or {}).items()
+        if str(k).strip() and isinstance(v, dict)
+    }
     with Ecdict(db_path) as dic:
         result: dict[str, str] = {}
         for word in words:
             key = word.strip().lower()
             if not key or key in result:
+                continue
+            client = overlay.get(key)
+            if client and str(client.get("translation") or "").strip():
+                # 本机增补：有英文释义则一并输出（用户可选填写）
+                result[key] = entry_from_client(client).format_text(
+                    include_english=True
+                )
                 continue
             entry = dic.lookup(word)
             result[key] = (

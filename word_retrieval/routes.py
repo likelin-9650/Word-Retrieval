@@ -28,11 +28,12 @@ from word_retrieval.pages.result import render_result_page
 from word_retrieval.pages.settings import render_settings_page
 from word_retrieval.user_data import (
     apply_confirm_updates,
+    client_dict_entries_map,
+    client_dict_overrides,
     dump_user_data,
     is_custom_wordlist,
     parse_user_data,
     resolve_known_words,
-    client_dict_overrides,
 )
 from word_retrieval.vocab_doc import build_vocabulary_docx
 
@@ -192,10 +193,12 @@ def _begin_review(
 def _finalize_session(
     session: dict,
     *,
+    session_id: str | None = None,
     green_to_vocab: set[str],
     green_remove_words: set[str],
     yellow_to_words: set[str],
     yellow_to_dict: set[str],
+    yellow_dict_entries: list[dict] | None = None,
     keep_red: set[str],
     red_to_words: set[str],
 ):
@@ -210,15 +213,22 @@ def _finalize_session(
     keep_red &= set(session["red"])
     red_to_words &= set(session["red"])
 
-    updated_user_data, saved_count, removed_count = apply_confirm_updates(
-        user_data,
-        wordlist_name=wordlist_name,
-        baseline_names=baseline_names,
-        green_remove_words=green_remove_words,
-        yellow_to_words=yellow_to_words,
-        yellow_to_dict=yellow_to_dict,
-        red_to_words=red_to_words,
-    )
+    try:
+        updated_user_data, saved_count, removed_count = apply_confirm_updates(
+            user_data,
+            wordlist_name=wordlist_name,
+            baseline_names=baseline_names,
+            green_remove_words=green_remove_words,
+            yellow_to_words=yellow_to_words,
+            yellow_to_dict=yellow_to_dict,
+            yellow_dict_entries=yellow_dict_entries,
+            red_to_words=red_to_words,
+        )
+    except ValueError as exc:
+        if session_id:
+            session["created_at"] = time.time()
+            _SESSIONS[session_id] = session
+        return render_message_page("确认失败", str(exc), status=400)
 
     # 文档着色：剔出对照表的绿词按未掌握（红）显示
     doc_green = (
@@ -257,6 +267,7 @@ def _finalize_session(
         definitions = lookup_definitions(
             sorted_vocab,
             Path(current_app.config["ECDICT_DB"]),
+            client_entries=client_dict_entries_map(updated_user_data),
         )
         pairs = [
             (word, definitions.get(word, "") or "（词库未收录）") for word in sorted_vocab
@@ -442,12 +453,33 @@ def confirm():
         v.strip().lower() for v in request.form.getlist("red_to_words") if v.strip()
     }
 
+    yellow_dict_entries: list[dict] = []
+    raw_entries = (request.form.get("yellow_dict_entries") or "").strip()
+    if raw_entries:
+        try:
+            parsed = json.loads(raw_entries)
+        except json.JSONDecodeError:
+            return render_message_page(
+                "确认失败",
+                "大词典词条数据格式无效，请返回确认页重试。",
+                status=400,
+            )
+        if not isinstance(parsed, list):
+            return render_message_page(
+                "确认失败",
+                "大词典词条数据格式无效，请返回确认页重试。",
+                status=400,
+            )
+        yellow_dict_entries = [e for e in parsed if isinstance(e, dict)]
+
     return _finalize_session(
         session,
+        session_id=session_id,
         green_to_vocab=green_to_vocab,
         green_remove_words=green_remove_words,
         yellow_to_words=yellow_to_words,
         yellow_to_dict=yellow_to_dict,
+        yellow_dict_entries=yellow_dict_entries,
         keep_red=keep_red,
         red_to_words=red_to_words,
     )

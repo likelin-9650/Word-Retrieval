@@ -1,11 +1,15 @@
 /**
  * 用户差分数据（方案 A）：仅存本浏览器，与服务器基准对照表 / ECDICT 合并使用。
  * localStorage key: word-retrieval-user-data
+ *
+ * dict_extra：ECDICT 风格词条数组
+ *   { word, phonetic, definition, translation, pos, exchange }
+ * 兼容旧版纯字符串词头列表。
  */
 (function (global) {
   const STORAGE_KEY = "word-retrieval-user-data";
   const SELECTED_KEY = "word-retrieval-selected-wordlist";
-  const VERSION = 1;
+  const VERSION = 2;
 
   function emptyData() {
     return {
@@ -14,6 +18,19 @@
       dict_exclude: [],
       patches: {},
       custom_lists: {},
+    };
+  }
+
+  function emptyDictEntry(word) {
+    return {
+      word: String(word || "")
+        .trim()
+        .toLowerCase(),
+      phonetic: "",
+      definition: "",
+      translation: "",
+      pos: "",
+      exchange: "",
     };
   }
 
@@ -26,6 +43,52 @@
       if (t) out.add(t);
     });
     return Array.from(out).sort();
+  }
+
+  function normalizeDictEntry(raw, requireGloss) {
+    if (typeof raw === "string") {
+      const word = raw.trim().toLowerCase();
+      if (!word) return null;
+      if (requireGloss) {
+        throw new Error("「" + word + "」加入大词典时必须填写中文释义与词性。");
+      }
+      return emptyDictEntry(word);
+    }
+    if (!raw || typeof raw !== "object") return null;
+    const word = String(raw.word || "")
+      .trim()
+      .toLowerCase();
+    if (!word) return null;
+    const entry = emptyDictEntry(word);
+    entry.phonetic = String(raw.phonetic || "").trim();
+    entry.definition = String(raw.definition || "").trim();
+    entry.translation = String(raw.translation || "").trim();
+    entry.pos = String(raw.pos || "").trim();
+    entry.exchange = String(raw.exchange || "").trim();
+    if (requireGloss) {
+      if (!entry.translation) {
+        throw new Error("「" + word + "」加入大词典时必须填写中文释义。");
+      }
+      if (!entry.pos) {
+        throw new Error("「" + word + "」加入大词典时必须填写词性。");
+      }
+    }
+    return entry;
+  }
+
+  function normalizeDictExtra(list) {
+    const byWord = {};
+    (Array.isArray(list) ? list : []).forEach((item) => {
+      try {
+        const entry = normalizeDictEntry(item, false);
+        if (entry) byWord[entry.word] = entry;
+      } catch (_) {
+        /* skip */
+      }
+    });
+    return Object.keys(byWord)
+      .sort()
+      .map((k) => byWord[k]);
   }
 
   function safeListName(name) {
@@ -44,7 +107,7 @@
       if (!parsed || typeof parsed !== "object") return emptyData();
       return {
         version: VERSION,
-        dict_extra: normalizeWords(parsed.dict_extra),
+        dict_extra: normalizeDictExtra(parsed.dict_extra),
         dict_exclude: normalizeWords(parsed.dict_exclude),
         patches: sanitizePatches(parsed.patches),
         custom_lists: sanitizeCustoms(parsed.custom_lists),
@@ -93,7 +156,7 @@
   function save(data) {
     const payload = {
       version: VERSION,
-      dict_extra: normalizeWords(data.dict_extra),
+      dict_extra: normalizeDictExtra(data.dict_extra),
       dict_exclude: normalizeWords(data.dict_exclude),
       patches: sanitizePatches(data.patches),
       custom_lists: sanitizeCustoms(data.custom_lists),
@@ -208,7 +271,7 @@
       return "本浏览器尚未保存任何对照表/词典改动。";
     }
     return (
-      `本机已存：词典增补 ${extra}、排除 ${excl}；` +
+      `本机已存：词典增补词条 ${extra}、排除 ${excl}；` +
       `基准表差分 ${patchCount} 份；自建对照表 ${customCount} 份。`
     );
   }
@@ -216,6 +279,9 @@
   global.UserDataStore = {
     STORAGE_KEY,
     emptyData,
+    emptyDictEntry,
+    normalizeDictEntry,
+    normalizeDictExtra,
     load,
     save,
     dump,

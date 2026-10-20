@@ -22,7 +22,7 @@ A local Flask web app that extracts English words from `.docx` or pasted text, c
 | 服务器提供基准对照表；个人改动存本浏览器 | Server baselines; personal edits in the browser |
 | 多份对照表；可上传 `.txt` 创建（存本机） | Multiple wordlists; create from `.txt` (browser-local) |
 | 上传时可扩展屈折派生词（lemminflect） | Optional inflection expansion |
-| 大词典 = ECDICT 词头 ∪ 本机增补 − 本机排除 | ECDICT ∪ browser add − browser exclude |
+| 大词典 = ECDICT 词头 ∪ 本机增补词条 − 本机排除 | ECDICT ∪ browser entries − browser exclude |
 | 本机数据导出 / 导入 / 清除 | Export / import / clear browser data |
 | 页脚展示 ICP 与公安备案 | ICP + MPS (Gong’an) beian in footer |
 
@@ -74,7 +74,11 @@ Server keeps ECDICT and baseline checklists. Your edits live in the browser only
 
 用于区分**黄词 / 红词**，词头来自服务器 **`dictionaries/ecdict.db`（ECDICT）**。
 
-设置页维护的增补/排除写在**本浏览器**，不直接改 ECDICT，也不再依赖服务器上的 `dict_extra.txt` / `dict_exclude.txt` 作为网页用户数据。
+设置页与确认页的增补/排除写在**本浏览器**，不直接改 ECDICT，也不再依赖服务器上的 `dict_extra.txt` / `dict_exclude.txt` 作为网页用户数据。
+
+本机增补存为与 ECDICT 对齐的**完整词条**（`word` / `phonetic` / `definition` / `translation` / `pos` / `exchange`）：**中文释义与词性必填**，音标、英文释义、词形变化可选。查释义时，本机有中文释义的词条优先于服务器 ECDICT。旧版仅词头的 `dict_extra` 字符串列表仍可导入（仅参与分类，无释义）。
+
+Client dictionary add-ons are full ECDICT-style entries stored in the browser (**Chinese gloss and POS required**). Optional: phonetic, English definition, exchange. Client entries with a Chinese gloss override server ECDICT on lookup.
 
 ### 三色含义 · Colors
 
@@ -94,6 +98,8 @@ Server keeps ECDICT and baseline checklists. Your edits live in the browser only
 **黄色词**
 
 - **对照表** / **大词典（本机增补）**：可单独或同时勾选；写入本浏览器  
+- 勾选**大词典**时须填写**中文释义与词性**（音标、英文释义、词形变化可选），与 ECDICT 字段对齐  
+
 
 **红色词**
 
@@ -168,10 +174,10 @@ python app.py
 ## 使用流程 · Workflow
 
 1. **首页** `/`：选择对照表（含本机自建/已改）→ 粘贴文章和/或上传 `.docx` → 提交。  
-2. **确认页**：按绿/黄/红勾选（见上文）；写回本浏览器。  
+2. **确认页**：按绿/黄/红勾选（见上文）；黄词勾「大词典」须填中文释义与词性；写回本浏览器。  
 3. **结果页**：下载着色文档（若上传了 Word）与释义表；本机差分自动保存。  
 4. **设置** `/settings`：  
-   - 编辑本机词典覆盖 / 对照表差分  
+   - 编辑本机词典覆盖（完整 ECDICT 词条）/ 对照表差分  
    - 新建**空**对照表（本机）  
    - **上传 `.txt`** 创建对照表（服务器仅校验，可选派生词；结果存本机）  
    - 删除本机自建对照表（基准 `words.txt` 等不可删）  
