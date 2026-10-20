@@ -223,7 +223,7 @@ Word-Retrieval/
     └── pages/                  # 确认 / 结果 / 设置等页面（页脚含 ICP + 公安备案）
 ```
 
-生产部署：push 到 GitHub **`main`** 触发 Actions 自动部署；其它分支不会自动上线。
+生产部署：push 到 GitHub **任意分支**（含 `main` / `feature/*` 等）都会触发 Actions 自动部署到同一台服务器；也可在 Actions 页手动 Run workflow。注意实验分支也会覆盖线上。
 
 ---
 
@@ -254,7 +254,7 @@ Word-Retrieval/
 | 新对照表首页不显示 | 刷新网页 |
 | 本机改动消失 | 是否清过站点数据/换了浏览器；用设置页「导出」备份 |
 | 设置页按钮无反应 | 硬刷新（Ctrl+F5）；确认 `/static/user_data.js` 可访问；勿对 script 内 JSON 使用 html.escape |
-| 推了代码但网站未更新 | 是否推到了 `main`？仅 `main` 的 push 触发自动部署 |
+| 推了代码但网站未更新 | 看 Actions 是否跑通；任意分支 push 都会部署，失败时看 workflow 日志 |
 | 无法读取文档 | 使用 `.docx`，非旧版 `.doc` |
 | PowerShell 无法 `Activate.ps1` | 直接用 `.\.venv\Scripts\python.exe app.py` |
 | GitHub 推送因大文件失败 | 勿提交 `.venv` |

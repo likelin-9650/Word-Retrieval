@@ -5,7 +5,9 @@ name: Deploy to Server
 
 on:
   push:
-    branches: [main]
+    # 任意分支 push 均触发部署（含 main / feature/* 等）
+    branches:
+      - "**"
   workflow_dispatch:
 
 jobs:

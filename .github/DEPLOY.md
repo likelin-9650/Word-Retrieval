@@ -40,4 +40,5 @@
 #   然后把 dictionaries/ecdict.db 上传到服务器：
 #     scp dictionaries/ecdict.db USER@IP:~/Word-Retrieval/dictionaries/
 #
-# 六、触发：push 到 main，或 Actions 页手动 Run workflow
+# 六、触发：push 任意分支（含 main / feature/* 等），或 Actions 页手动 Run workflow
+#     注意：任意分支都会覆盖服务器上同一份部署目录，推实验分支也会上线。
