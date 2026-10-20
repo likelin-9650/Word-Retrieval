@@ -6,7 +6,13 @@ import json
 
 from flask import url_for
 
-from word_retrieval.pages import ICP_FOOTER_CSS, icp_footer_html
+from word_retrieval.pages import (
+    EXCHANGE_HELP_CSS,
+    EXCHANGE_HELP_JS,
+    ICP_FOOTER_CSS,
+    exchange_field_html,
+    icp_footer_html,
+)
 
 
 def render_settings_page(
@@ -21,6 +27,13 @@ def render_settings_page(
         "<", "\\u003c"
     )
     footer = icp_footer_html()
+    exchange_block = exchange_field_html(
+        input_html=(
+            '<input id="dict_exchange" type="text" placeholder="s:apples" />'
+        ),
+        label_text="词形变化（可选）",
+        label_for="dict_exchange",
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -90,6 +103,7 @@ def render_settings_page(
     .error {{ color: var(--danger); }}
     #statusLine {{ min-height: 1.4em; }}
 {ICP_FOOTER_CSS}
+{EXCHANGE_HELP_CSS}
   </style>
 </head>
 <body>
@@ -121,8 +135,7 @@ def render_settings_page(
       <input id="dict_phonetic" type="text" placeholder="ˈæpl" />
       <label for="dict_definition">英文释义（可选）</label>
       <textarea id="dict_definition" placeholder="a round fruit"></textarea>
-      <label for="dict_exchange">词形变化（可选）</label>
-      <input id="dict_exchange" type="text" placeholder="s:apples" />
+      {exchange_block}
       <div class="row"><button type="button" id="btnDictAdd">保存本机增补词条</button></div>
       <p class="hint" id="dictExtraList" style="white-space:pre-wrap;margin-top:0.9rem;"></p>
       <label for="dict_remove">排除单词（每行一个）</label>
@@ -483,6 +496,7 @@ def render_settings_page(
     }});
 
     refresh();
+{EXCHANGE_HELP_JS}
   </script>
 </body>
 </html>

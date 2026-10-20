@@ -6,12 +6,26 @@ import html
 
 from flask import url_for
 
-from word_retrieval.pages import ICP_FOOTER_CSS, icp_footer_html
+from word_retrieval.pages import (
+    EXCHANGE_HELP_CSS,
+    EXCHANGE_HELP_JS,
+    ICP_FOOTER_CSS,
+    exchange_field_html,
+    icp_footer_html,
+)
 
 
 def _dual_target_yellow_list(words: list[str]) -> str:
     if not words:
         return '<p class="empty">无</p>'
+    exchange_input = (
+        '<input type="text" class="dict-exchange" '
+        'placeholder="如 s:apples/p:apple" />'
+    )
+    exchange_block = exchange_field_html(
+        input_html=exchange_input,
+        label_text="词形变化",
+    )
     items = []
     for word in words:
         w = html.escape(word)
@@ -35,8 +49,7 @@ def _dual_target_yellow_list(words: list[str]) -> str:
             f'<input type="text" class="dict-pos" placeholder="如 n. / v. / adj." /></label>'
             f'<label>音标'
             f'<input type="text" class="dict-phonetic" placeholder="如 ˈæpl 或 /ˈæpl/" /></label>'
-            f'<label>词形变化'
-            f'<input type="text" class="dict-exchange" placeholder="如 s:apples/p:apple" /></label>'
+            f"{exchange_block}"
             f"</div>"
             f'<label>英文释义'
             f'<textarea class="dict-definition" rows="2" '
@@ -190,11 +203,13 @@ def render_confirm_page(
       border: 1px solid var(--line); background: #fff;
     }}
     .dict-fields textarea {{ resize: vertical; }}
+    .dict-fields .exchange-field {{ grid-column: 1 / -1; }}
     .field-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 0.55rem;
     }}
+{EXCHANGE_HELP_CSS}
     .empty {{ color: var(--muted); margin: 0; }}
     .form-error {{
       color: var(--unknown); margin: 0.6rem 0 0; font-size: 0.92rem; display: none;
@@ -388,6 +403,7 @@ def render_confirm_page(
         entriesInput.value = JSON.stringify(entries);
       }});
     }}
+{EXCHANGE_HELP_JS}
   </script>
 </body>
 </html>
