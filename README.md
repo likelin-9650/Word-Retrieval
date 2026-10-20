@@ -24,6 +24,19 @@ A local Flask web app that extracts English words from `.docx` or pasted text, c
 | 上传时可扩展屈折派生词（lemminflect） | Optional inflection expansion |
 | 大词典 = ECDICT 词头 ∪ 本机增补 − 本机排除 | ECDICT ∪ browser add − browser exclude |
 | 本机数据导出 / 导入 / 清除 | Export / import / clear browser data |
+| 页脚展示 ICP 与公安备案 | ICP + MPS (Gong’an) beian in footer |
+
+---
+
+## 备案信息 · Filings
+
+| 类型 | 编号 | 链接 |
+|------|------|------|
+| 工信部 ICP | 蜀ICP备2026058519号 | https://beian.miit.gov.cn/ |
+| 公安备案 | 川公网安备51070302110809号 | https://beian.mps.gov.cn/#/query/webSearch?code=51070302110809 |
+
+公安备案图标：`word_retrieval/static/beian-mps.png`。  
+动态页脚由 `word_retrieval/pages/__init__.py` 生成；首页 `index.html` 为静态页脚，**改号时两处同步**。
 
 ---
 
@@ -205,9 +218,12 @@ Word-Retrieval/
     ├── highlighter.py          # 文档着色
     ├── vocab_doc.py            # 生成释义 Word
     ├── static/
-    │   └── user_data.js        # localStorage 读写
-    └── pages/                  # 确认 / 结果 / 设置等页面
+    │   ├── user_data.js        # localStorage 读写
+    │   └── beian-mps.png       # 公安备案图标
+    └── pages/                  # 确认 / 结果 / 设置等页面（页脚含 ICP + 公安备案）
 ```
+
+生产部署：push 到 GitHub **`main`** 触发 Actions 自动部署；其它分支不会自动上线。
 
 ---
 
@@ -237,7 +253,8 @@ Word-Retrieval/
 | 上传对照表被拒 | 检查一行一词、编码、扩展名 `.txt` |
 | 新对照表首页不显示 | 刷新网页 |
 | 本机改动消失 | 是否清过站点数据/换了浏览器；用设置页「导出」备份 |
-| 设置页按钮无反应 | 硬刷新（Ctrl+F5）；确认 `/static/user_data.js` 可访问 |
+| 设置页按钮无反应 | 硬刷新（Ctrl+F5）；确认 `/static/user_data.js` 可访问；勿对 script 内 JSON 使用 html.escape |
+| 推了代码但网站未更新 | 是否推到了 `main`？仅 `main` 的 push 触发自动部署 |
 | 无法读取文档 | 使用 `.docx`，非旧版 `.doc` |
 | PowerShell 无法 `Activate.ps1` | 直接用 `.\.venv\Scripts\python.exe app.py` |
 | GitHub 推送因大文件失败 | 勿提交 `.venv` |
