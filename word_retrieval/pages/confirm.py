@@ -40,13 +40,13 @@ def _dual_target_yellow_list(words: list[str]) -> str:
             f"</div>"
             f'<div class="dict-fields" hidden>'
             f'<p class="field-hint">加入大词典须填写与 ECDICT 对齐的词条：'
-            f'<strong>中文释义、词性必填</strong>；音标、英文释义、词形变化可选。</p>'
+            f'<strong>中文释义必填</strong>（请在释义中同时写上词性，如 '
+            f'<code>n. 苹果</code>）；音标、英文释义、词形变化可选。</p>'
             f'<label>中文释义 <span class="req">*</span>'
+            f'<span class="field-subhint">请同时写上词性，例如：n. 苹果 / v. 运行</span>'
             f'<textarea class="dict-translation" rows="2" '
-            f'placeholder="n. 释义一行一项"></textarea></label>'
+            f'placeholder="n. 苹果"></textarea></label>'
             f'<div class="field-grid">'
-            f'<label>词性 <span class="req">*</span>'
-            f'<input type="text" class="dict-pos" placeholder="如 n. / v. / adj." /></label>'
             f'<label>音标'
             f'<input type="text" class="dict-phonetic" placeholder="如 ˈæpl 或 /ˈæpl/" /></label>'
             f"{exchange_block}"
@@ -194,7 +194,14 @@ def render_confirm_page(
     .dict-fields .field-hint {{
       margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.45;
     }}
+    .dict-fields .field-subhint {{
+      display: block; font-weight: 400; color: var(--muted); font-size: 0.8rem;
+    }}
     .dict-fields .req {{ color: var(--unknown); }}
+    .dict-fields code {{
+      font-family: Consolas, "Courier New", monospace; font-size: 0.9em;
+      background: rgba(28, 77, 110, 0.06); padding: 0.05rem 0.25rem;
+    }}
     .dict-fields label {{
       display: grid; gap: 0.25rem; font-size: 0.88rem; font-weight: 600;
     }}
@@ -257,7 +264,7 @@ def render_confirm_page(
 
       <section class="panel" data-group="yellow">
         <h2 style="color:var(--proper)">黄色词 — 可加入对照表 / 大词典（ECDICT 增补） / 二者都加</h2>
-        <p class="hint">每个词可单独勾选目标；两者都勾选即同时加入。<strong>写入本浏览器</strong>，不改服务器基准文件。勾选「大词典」时须填写<strong>中文释义与词性</strong>（音标、英文释义、词形变化可选）。</p>
+        <p class="hint">每个词可单独勾选目标；两者都勾选即同时加入。<strong>写入本浏览器</strong>，不改服务器基准文件。勾选「大词典」时须填写<strong>中文释义</strong>（请在释义里写上词性，如 n. 苹果；音标、英文释义、词形变化可选）。</p>
         <div class="toolbar">
           <button type="button" data-action="words-all">对照表全选</button>
           <button type="button" data-action="words-none">对照表全不选</button>
@@ -373,18 +380,17 @@ def render_confirm_page(
           if (!toggle || !toggle.checked) return;
           const word = (block.getAttribute("data-word") || toggle.value || "").trim().toLowerCase();
           const translation = (block.querySelector(".dict-translation")?.value || "").trim();
-          const pos = (block.querySelector(".dict-pos")?.value || "").trim();
           const phonetic = (block.querySelector(".dict-phonetic")?.value || "").trim();
           const definition = (block.querySelector(".dict-definition")?.value || "").trim();
           const exchange = (block.querySelector(".dict-exchange")?.value || "").trim();
-          if (!translation || !pos) {{
+          if (!translation) {{
             missing.push(word);
             return;
           }}
           entries.push({{
             word,
             translation,
-            pos,
+            pos: "",
             phonetic,
             definition,
             exchange,
@@ -394,7 +400,8 @@ def render_confirm_page(
           ev.preventDefault();
           formError.style.display = "block";
           formError.textContent =
-            "勾选「大词典」的词须填写中文释义与词性：" + missing.slice(0, 8).join("、")
+            "勾选「大词典」的词须填写中文释义（请同时写上词性，如 n. 苹果）："
+            + missing.slice(0, 8).join("、")
             + (missing.length > 8 ? "…" : "");
           return;
         }}

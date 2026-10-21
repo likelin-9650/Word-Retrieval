@@ -228,5 +228,50 @@ def load_ecdict_headwords(db_path: str) -> frozenset[str]:
     )
 
 
+def load_exchange_map(db_path: Path, words: list[str] | set[str]) -> dict[str, str]:
+    """
+    批量读取词头对应的 exchange 字段。
+    返回 {小写词头: exchange 原文}；未命中不出现在结果中。
+    """
+    path = Path(db_path)
+    if not path.exists():
+        raise EcdictError(
+            f"未找到 ECDICT 数据库：{path.name}。请先运行 build_ecdict_db.py 生成。"
+        )
+    keys = sorted(
+        {
+            str(w).strip().lower()
+            for w in words
+            if str(w).strip()
+        }
+    )
+    if not keys:
+        return {}
+    out: dict[str, str] = {}
+    conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        chunk = 500
+        for i in range(0, len(keys), chunk):
+            part = keys[i : i + chunk]
+            placeholders = ",".join("?" * len(part))
+            rows = conn.execute(
+                f"""
+                SELECT lower(word), exchange FROM ecdict
+                WHERE lower(word) IN ({placeholders})
+                """,
+                part,
+            ).fetchall()
+            for word, exchange in rows:
+                key = str(word or "").strip().lower()
+                if not key:
+                    continue
+                text = str(exchange or "").strip()
+                if text:
+                    out[key] = text
+    finally:
+        conn.close()
+    return out
+
+
 def clear_ecdict_headwords_cache() -> None:
     load_ecdict_headwords.cache_clear()

@@ -14,7 +14,7 @@ UPLOAD_WORD_RE = re.compile(
     r"^[A-Za-z]+(?:'[A-Za-z]+)?$|^\d+(?:st|nd|rd|th)$",
     re.IGNORECASE,
 )
-MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_UPLOAD_BYTES = 1 * 1024 * 1024
 MAX_UPLOAD_WORDS = 200_000
 
 

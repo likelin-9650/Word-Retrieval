@@ -15,7 +15,8 @@ from word_retrieval.lexicon import (
 
 USER_DATA_VERSION = 2
 
-# 与 ECDICT 词条字段对齐；translation / pos 为新增时的必填项
+# 与 ECDICT 词条字段对齐；新增时仅 translation（中文释义）必填，
+# 词性请写在中文释义里（如「n. 苹果」）；pos 字段保留兼容，可为空。
 DICT_ENTRY_FIELDS = (
     "word",
     "phonetic",
@@ -54,7 +55,8 @@ def normalize_dict_entry(
 ) -> dict[str, str] | None:
     """
     规范化一条本机 ECDICT 增补词条。
-    兼容旧版纯字符串词头；require_gloss=True 时要求中文释义与词性非空。
+    兼容旧版纯字符串词头；require_gloss=True 时仅要求中文释义非空
+    （词性写在释义中，如「n. 苹果」）。
     """
     if isinstance(raw, str):
         word = raw.strip().lower()
@@ -62,7 +64,7 @@ def normalize_dict_entry(
             return None
         entry = empty_dict_entry(word)
         if require_gloss:
-            raise ValueError(f"「{word}」加入大词典时必须填写中文释义与词性。")
+            raise ValueError(f"「{word}」加入大词典时必须填写中文释义。")
         return entry
     if not isinstance(raw, dict):
         return None
@@ -76,9 +78,9 @@ def normalize_dict_entry(
         entry[key] = str(raw.get(key) or "").strip()
     if require_gloss:
         if not entry["translation"]:
-            raise ValueError(f"「{word}」加入大词典时必须填写中文释义。")
-        if not entry["pos"]:
-            raise ValueError(f"「{word}」加入大词典时必须填写词性。")
+            raise ValueError(
+                f"「{word}」加入大词典时必须填写中文释义（请同时写上词性，如 n. 苹果）。"
+            )
     return entry
 
 
@@ -318,7 +320,7 @@ def dict_add_entries(
 ) -> int:
     """
     写入本机 ECDICT 增补词条（完整字段）；同词覆盖。
-    新增时默认要求中文释义与词性；并从 dict_exclude 反排除。
+    新增时默认要求中文释义；并从 dict_exclude 反排除。
     """
     if not entries:
         return 0
@@ -419,7 +421,7 @@ def apply_confirm_updates(
     """
     确认页写回：只改 user_data 副本，不碰服务器文件。
     返回 (新数据, 写入对照表或词典的词数, 从对照表剔除数)。
-    黄词进大词典须带完整词条（中文释义、词性必填）。
+    黄词进大词典须带完整词条（中文释义必填，词性写在释义里）。
     """
     updated = deepcopy(user_data)
     saved = 0
@@ -441,7 +443,7 @@ def apply_confirm_updates(
         missing = sorted(yellow_to_dict - provided)
         if missing:
             raise ValueError(
-                "勾选「大词典」的黄词须同步提交词条（含中文释义与词性）："
+                "勾选「大词典」的黄词须同步提交词条（含中文释义）："
                 + "、".join(missing[:8])
                 + ("…" if len(missing) > 8 else "")
             )

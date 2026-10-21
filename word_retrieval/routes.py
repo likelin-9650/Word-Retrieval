@@ -15,7 +15,7 @@ from flask import Blueprint, current_app, jsonify, request, send_file
 from word_retrieval.ecdict import EcdictError, load_ecdict_headwords, lookup_definitions
 from word_retrieval.extractor import extract_english_words, read_docx_text
 from word_retrieval.highlighter import build_highlighted_docx
-from word_retrieval.inflections import expand_with_inflections
+from word_retrieval.inflections import expand_wordlist_forms
 from word_retrieval.lexicon import (
     decode_upload_text,
     ensure_wordlists_dir,
@@ -335,7 +335,13 @@ def settings():
 
 @bp.post("/api/parse_wordlist")
 def api_parse_wordlist():
-    """校验上传的对照表 txt，可选扩展屈折；结果由前端写入 localStorage。"""
+    """
+    校验上传的对照表 txt，可选扩展派生词；结果由前端写入 localStorage。
+
+    表单参数：
+      use_ecdict_exchange=1 — 采信 ECDICT exchange（默认开启若未传则看该字段）
+      algo_mode=none|all|pick — 算法扩充策略
+    """
     uploaded = request.files.get("wordlist_file")
     if uploaded is None or not uploaded.filename:
         return jsonify({"ok": False, "error": "请选择要上传的 .txt 文件。"}), 400
@@ -347,19 +353,57 @@ def api_parse_wordlist():
         text = decode_upload_text(raw)
         words = parse_and_validate_wordlist_text(text)
         base_count = len(words)
-        add_inflections = (request.form.get("add_inflections") or "") == "1"
-        if add_inflections:
-            words_set = expand_with_inflections(words)
+
+        # 兼容旧前端：add_inflections=1 → ECDICT + 算法全部采信
+        legacy = (request.form.get("add_inflections") or "") == "1"
+        use_ecdict_raw = request.form.get("use_ecdict_exchange")
+        if use_ecdict_raw is None:
+            use_ecdict = legacy
         else:
-            words_set = set(words)
-        sorted_words = sorted(words_set)
+            use_ecdict = use_ecdict_raw == "1"
+        algo_mode = (request.form.get("algo_mode") or "").strip().lower()
+        if not algo_mode:
+            algo_mode = "all" if legacy else "none"
+        if algo_mode not in {"none", "all", "pick"}:
+            algo_mode = "none"
+
+        if use_ecdict or algo_mode != "none":
+            result = expand_wordlist_forms(
+                words,
+                ecdict_db=Path(current_app.config["ECDICT_DB"]),
+                use_ecdict_exchange=use_ecdict,
+                algo_mode=algo_mode,
+            )
+            return jsonify(
+                {
+                    "ok": True,
+                    "words": result["accepted"],
+                    "algo_candidates": result["algo_candidates"],
+                    "base_count": base_count,
+                    "total_count": len(result["accepted"]),
+                    "ecdict_added": result["ecdict_added"],
+                    "algo_trusted_count": result["algo_trusted_count"],
+                    "algo_mode": result["algo_mode"],
+                    "use_ecdict_exchange": result["use_ecdict_exchange"],
+                    "needs_pick": result["needs_pick"],
+                    "with_inflections": True,
+                }
+            )
+
+        sorted_words = sorted(set(words))
         return jsonify(
             {
                 "ok": True,
                 "words": sorted_words,
+                "algo_candidates": [],
                 "base_count": base_count,
                 "total_count": len(sorted_words),
-                "with_inflections": add_inflections,
+                "ecdict_added": 0,
+                "algo_trusted_count": 0,
+                "algo_mode": "none",
+                "use_ecdict_exchange": False,
+                "needs_pick": False,
+                "with_inflections": False,
             }
         )
     except Exception as exc:  # noqa: BLE001

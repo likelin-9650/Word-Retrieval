@@ -21,7 +21,7 @@ def render_settings_page(
 ) -> str:
     home = url_for("main.index")
     parse_api = url_for("main.api_parse_wordlist")
-    static_js = url_for("static", filename="user_data.js") + "?v=2"
+    static_js = url_for("static", filename="user_data.js") + "?v=3"
     # 勿对 script 内 JSON 使用 html.escape：script 数据态不解码 &quot;，会导致 JSON.parse 失败
     baseline_json = json.dumps(baseline_wordlists, ensure_ascii=False).replace(
         "<", "\\u003c"
@@ -88,9 +88,25 @@ def render_settings_page(
     .req strong {{ color: var(--ink); }}
     .row {{ display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.7rem; align-items: center; }}
     .check {{
-      display: flex; align-items: center; gap: 0.45rem; font-weight: 600; margin: 0.6rem 0;
+      display: flex; align-items: flex-start; gap: 0.45rem; font-weight: 600; margin: 0.45rem 0;
+      line-height: 1.4;
     }}
-    .check input {{ width: auto; }}
+    .check input {{ width: auto; margin-top: 0.2rem; flex-shrink: 0; }}
+    code {{
+      font-family: Consolas, "Courier New", monospace; font-size: 0.9em;
+      background: rgba(28, 77, 110, 0.06); padding: 0.05rem 0.25rem;
+    }}
+    .algo-pick-list {{
+      max-height: 220px; overflow: auto; border: 1px solid var(--line);
+      background: #fff; padding: 0.5rem 0.7rem; margin: 0.4rem 0 0.7rem;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 0.25rem 0.6rem;
+    }}
+    .algo-pick-list label {{
+      display: flex; align-items: center; gap: 0.35rem; font-weight: 500; margin: 0;
+      font-size: 0.9rem;
+    }}
+    .algo-pick-list input {{ width: auto; }}
     button, .btn {{
       appearance: none; border: 0; background: var(--accent); color: #fff;
       font: inherit; font-weight: 600; padding: 0.7rem 1rem; cursor: pointer;
@@ -122,15 +138,14 @@ def render_settings_page(
       <h2>编辑大词典覆盖（本机）</h2>
       <p class="hint">
         基础词表为服务器 ECDICT。增补写入完整词条（与 ECDICT 字段对齐）：
-        <strong>中文释义、词性必填</strong>；音标、英文释义、词形变化可选。
-        「排除」只填词头即可。
+        <strong>中文释义必填</strong>（请在释义中同时写上词性，如 <code>n. 苹果</code>）；
+        音标、英文释义、词形变化可选。「排除」只填词头即可。
       </p>
       <label for="dict_word">单词 <span style="color:var(--danger)">*</span></label>
       <input id="dict_word" type="text" placeholder="apple" />
       <label for="dict_translation">中文释义 <span style="color:var(--danger)">*</span></label>
+      <p class="hint" style="margin-top:0">请同时写上词性，例如：<code>n. 苹果</code> 或 <code>v. 运行；n. 奔跑</code>。</p>
       <textarea id="dict_translation" placeholder="n. 苹果"></textarea>
-      <label for="dict_pos">词性 <span style="color:var(--danger)">*</span></label>
-      <input id="dict_pos" type="text" placeholder="n." />
       <label for="dict_phonetic">音标（可选）</label>
       <input id="dict_phonetic" type="text" placeholder="ˈæpl" />
       <label for="dict_definition">英文释义（可选）</label>
@@ -169,7 +184,7 @@ def render_settings_page(
         <strong>文件格式与排版要求：</strong><br />
         1. 扩展名必须为 <strong>.txt</strong>；编码推荐 <strong>UTF-8</strong>（也支持带 BOM 的 UTF-8、GBK）。<br />
         2. <strong>一行一个英语单词</strong>；允许空行。<br />
-        3. 字母词、撇号缩写或序数缩写；大小不超过 <strong>5 MB</strong>。<br />
+        3. 字母词、撇号缩写或序数缩写；大小不超过 <strong>1 MB</strong>。<br />
         4. 服务器仅负责校验（及可选派生词扩展），词表仍写入本浏览器。
       </div>
       <label for="upload_name">对照表名称</label>
@@ -177,10 +192,37 @@ def render_settings_page(
       <label for="wordlist_file">选择 .txt 文件</label>
       <input id="wordlist_file" type="file" accept=".txt,text/plain" />
       <label class="check">
-        <input type="checkbox" id="add_inflections" value="1" />
-        添加派生词
+        <input type="checkbox" id="use_ecdict_exchange" value="1" checked />
+        采信 ECDICT 词形变化（exchange，全部采信）
+      </label>
+      <p class="hint" style="margin-top:0.2rem">算法扩充（lemminflect）：</p>
+      <label class="check">
+        <input type="radio" name="algo_mode" value="none" checked />
+        不使用算法
+      </label>
+      <label class="check">
+        <input type="radio" name="algo_mode" value="all" />
+        全部采信算法结果
+      </label>
+      <label class="check">
+        <input type="radio" name="algo_mode" value="pick" />
+        对「算法有、但不在 ECDICT 词头中」的结果自行勾选
+        <span class="hint" style="font-weight:400">（已在 ECDICT 中的算法结果仍自动采信）</span>
       </label>
       <div class="row"><button type="button" id="btnUpload">上传并保存到本机</button></div>
+      <div id="algoPickPanel" class="req" style="display:none;margin-top:0.9rem">
+        <strong>请勾选要加入对照表的算法派生词</strong>
+        <span class="hint">（下列词由算法生成且不在 ECDICT 词头中）</span>
+        <div class="row" style="margin:0.5rem 0">
+          <button type="button" class="secondary" id="btnAlgoPickAll">全选</button>
+          <button type="button" class="secondary" id="btnAlgoPickNone">全不选</button>
+        </div>
+        <div id="algoPickList" class="algo-pick-list"></div>
+        <div class="row">
+          <button type="button" id="btnAlgoPickSave">确认并保存到本机</button>
+          <button type="button" class="danger" id="btnAlgoPickCancel">取消</button>
+        </div>
+      </div>
     </section>
 
     <section class="panel">
@@ -239,8 +281,8 @@ def render_settings_page(
         return;
       }}
       const lines = extras.slice(0, 40).map((e) => {{
-        const gloss = (e.translation || "").replace(/\\s+/g, " ").slice(0, 40);
-        return `${{e.word}} [${{e.pos || "?"}}] ${{gloss || "（无中文释义）"}}`;
+        const gloss = (e.translation || "").replace(/\\s+/g, " ").slice(0, 48);
+        return `${{e.word}}  ${{gloss || "（无中文释义）"}}`;
       }});
       let text = "已存增补 " + extras.length + " 条：\\n" + lines.join("\\n");
       if (extras.length > 40) text += "\\n…";
@@ -284,7 +326,7 @@ def render_settings_page(
     }}
 
     function clearDictEntryForm() {{
-      ["dict_word", "dict_translation", "dict_pos", "dict_phonetic",
+      ["dict_word", "dict_translation", "dict_phonetic",
        "dict_definition", "dict_exchange"].forEach((id) => {{
         const el = document.getElementById(id);
         if (el) el.value = "";
@@ -297,7 +339,7 @@ def render_settings_page(
         const entry = UserDataStore.normalizeDictEntry({{
           word: document.getElementById("dict_word").value,
           translation: document.getElementById("dict_translation").value,
-          pos: document.getElementById("dict_pos").value,
+          pos: "",
           phonetic: document.getElementById("dict_phonetic").value,
           definition: document.getElementById("dict_definition").value,
           exchange: document.getElementById("dict_exchange").value,
@@ -405,8 +447,91 @@ def render_settings_page(
       }}
     }});
 
+    let pendingUpload = null;
+
+    function hideAlgoPick() {{
+      pendingUpload = null;
+      const panel = document.getElementById("algoPickPanel");
+      panel.style.display = "none";
+      document.getElementById("algoPickList").innerHTML = "";
+    }}
+
+    function saveCustomList(key, words, statusMsg) {{
+      const data = UserDataStore.load();
+      if (BASELINE.includes(key) || data.custom_lists[key]) {{
+        throw new Error("对照表已存在：" + key);
+      }}
+      data.custom_lists[key] = words;
+      UserDataStore.save(data);
+      UserDataStore.setSelected(key);
+      document.getElementById("upload_name").value = "";
+      document.getElementById("wordlist_file").value = "";
+      hideAlgoPick();
+      setStatus(statusMsg);
+      refresh();
+    }}
+
+    function showAlgoPick(key, accepted, candidates, meta) {{
+      pendingUpload = {{ key, accepted, candidates, meta }};
+      const list = document.getElementById("algoPickList");
+      list.innerHTML = "";
+      candidates.forEach((w) => {{
+        const lab = document.createElement("label");
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.value = w;
+        box.checked = false;
+        lab.appendChild(box);
+        lab.appendChild(document.createTextNode(w));
+        list.appendChild(lab);
+      }});
+      document.getElementById("algoPickPanel").style.display = "block";
+      setStatus(
+        `已自动采信原词与 ECDICT 相关词形共 ${{accepted.length}} 个；`
+        + `另有 ${{candidates.length}} 个算法派生词不在 ECDICT 中，请勾选后确认。`
+      );
+    }}
+
+    document.getElementById("btnAlgoPickAll").addEventListener("click", () => {{
+      document.querySelectorAll("#algoPickList input[type=checkbox]").forEach((b) => {{
+        b.checked = true;
+      }});
+    }});
+    document.getElementById("btnAlgoPickNone").addEventListener("click", () => {{
+      document.querySelectorAll("#algoPickList input[type=checkbox]").forEach((b) => {{
+        b.checked = false;
+      }});
+    }});
+    document.getElementById("btnAlgoPickCancel").addEventListener("click", () => {{
+      hideAlgoPick();
+      setStatus("已取消保存。");
+    }});
+    document.getElementById("btnAlgoPickSave").addEventListener("click", () => {{
+      try {{
+        if (!pendingUpload) throw new Error("没有待确认的上传。");
+        const picked = [];
+        document.querySelectorAll("#algoPickList input[type=checkbox]").forEach((b) => {{
+          if (b.checked) picked.push(b.value);
+        }});
+        const merged = Array.from(
+          new Set([].concat(pendingUpload.accepted || [], picked))
+        ).sort();
+        const key = pendingUpload.key;
+        const base = pendingUpload.meta && pendingUpload.meta.base_count;
+        saveCustomList(
+          key,
+          merged,
+          `已保存到本机 ${{key}}：原词 ${{base}}，最终 ${{merged.length}} 个`
+            + `（含自选算法派生 ${{picked.length}}）。`
+        );
+      }} catch (err) {{
+        setStatus(String(err.message || err), true);
+      }}
+    }});
+
     document.getElementById("btnUpload").addEventListener("click", async () => {{
       try {{
+        hideAlgoPick();
         const key = ensureName(document.getElementById("upload_name").value);
         const fileInput = document.getElementById("wordlist_file");
         if (!fileInput.files || !fileInput.files[0]) {{
@@ -418,23 +543,30 @@ def render_settings_page(
         }}
         const fd = new FormData();
         fd.append("wordlist_file", fileInput.files[0]);
-        if (document.getElementById("add_inflections").checked) {{
-          fd.append("add_inflections", "1");
+        if (document.getElementById("use_ecdict_exchange").checked) {{
+          fd.append("use_ecdict_exchange", "1");
+        }} else {{
+          fd.append("use_ecdict_exchange", "0");
         }}
+        const algoRadio = document.querySelector('input[name="algo_mode"]:checked');
+        fd.append("algo_mode", (algoRadio && algoRadio.value) || "none");
         setStatus("正在校验…");
         const resp = await fetch(PARSE_API, {{ method: "POST", body: fd }});
         const body = await resp.json();
         if (!body.ok) throw new Error(body.error || "上传失败");
-        data.custom_lists[key] = body.words || [];
-        UserDataStore.save(data);
-        UserDataStore.setSelected(key);
-        document.getElementById("upload_name").value = "";
-        fileInput.value = "";
-        const msg = body.with_inflections
-          ? `已保存到本机 ${{key}}：原词 ${{body.base_count}}，含派生共 ${{body.total_count}}。`
-          : `已保存到本机 ${{key}}：导入 ${{body.base_count}} 个单词。`;
-        setStatus(msg);
-        refresh();
+        if (body.needs_pick) {{
+          showAlgoPick(key, body.words || [], body.algo_candidates || [], body);
+          return;
+        }}
+        let msg;
+        if (body.with_inflections) {{
+          msg = `已保存到本机 ${{key}}：原词 ${{body.base_count}}，`
+            + `ECDICT 增补 ${{body.ecdict_added || 0}}，`
+            + `算法采信 ${{body.algo_trusted_count || 0}}，共 ${{body.total_count}}。`;
+        }} else {{
+          msg = `已保存到本机 ${{key}}：导入 ${{body.base_count}} 个单词。`;
+        }}
+        saveCustomList(key, body.words || [], msg);
       }} catch (err) {{
         setStatus(String(err.message || err), true);
       }}

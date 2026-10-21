@@ -204,7 +204,7 @@ def render_result_page(
   </main>
   {footer}
   <script type="application/json" id="user-data-payload">{safe_json}</script>
-  <script src="{url_for('static', filename='user_data.js')}?v=2"></script>
+  <script src="{url_for('static', filename='user_data.js')}?v=3"></script>
   <script>
     (function () {{
       const el = document.getElementById("user-data-payload");

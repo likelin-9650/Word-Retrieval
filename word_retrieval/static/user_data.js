@@ -50,7 +50,7 @@
       const word = raw.trim().toLowerCase();
       if (!word) return null;
       if (requireGloss) {
-        throw new Error("「" + word + "」加入大词典时必须填写中文释义与词性。");
+        throw new Error("「" + word + "」加入大词典时必须填写中文释义。");
       }
       return emptyDictEntry(word);
     }
@@ -67,10 +67,9 @@
     entry.exchange = String(raw.exchange || "").trim();
     if (requireGloss) {
       if (!entry.translation) {
-        throw new Error("「" + word + "」加入大词典时必须填写中文释义。");
-      }
-      if (!entry.pos) {
-        throw new Error("「" + word + "」加入大词典时必须填写词性。");
+        throw new Error(
+          "「" + word + "」加入大词典时必须填写中文释义（请同时写上词性，如 n. 苹果）。"
+        );
       }
     }
     return entry;
