@@ -24,6 +24,7 @@ from word_retrieval.lexicon import (
 )
 from word_retrieval.pages.confirm import render_confirm_page
 from word_retrieval.pages.message import render_message_page
+from word_retrieval.pages.privacy import render_privacy_page
 from word_retrieval.pages.result import render_result_page
 from word_retrieval.pages.settings import render_settings_page
 from word_retrieval.user_data import (
@@ -335,6 +336,11 @@ def settings():
     )
     names = _baseline_names()
     return render_settings_page(baseline_wordlists=names)
+
+
+@bp.get("/privacy")
+def privacy():
+    return render_privacy_page()
 
 
 @bp.post("/api/parse_wordlist")

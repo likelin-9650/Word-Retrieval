@@ -173,6 +173,13 @@
       vertical-align: middle;
       flex-shrink: 0;
     }
+    .site-footer .footer-nav {
+      margin-bottom: 0.45rem;
+    }
+    .site-footer .footer-nav a {
+      font-weight: 600;
+      color: var(--accent);
+    }
   </style>
 </head>
 <body>
@@ -184,6 +191,7 @@
     <p class="lead">
       上传 Word 或直接输入文章：提取后按绿/黄/红分类，人工确认后再下载标注文档与本地词典释义表。
       对照表与词典的个人改动保存在本浏览器，服务器只提供基准 ECDICT 与默认对照表。
+      详见<a href="/privacy">隐私说明</a>。
     </p>
     <p class="hint" id="serverHint" hidden style="color:#a33;margin-bottom:1rem;"></p>
 
@@ -224,6 +232,9 @@
   </main>
 
   <footer class="site-footer">
+    <div class="footer-nav">
+      <a href="/privacy">隐私说明</a>
+    </div>
     <div class="beian-lines">
       <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026058519号</a>
       <a href="https://beian.mps.gov.cn/#/query/webSearch?code=51070302110809" rel="noreferrer" target="_blank">

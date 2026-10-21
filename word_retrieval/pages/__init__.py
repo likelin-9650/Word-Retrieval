@@ -41,14 +41,25 @@ ICP_FOOTER_CSS = """
       vertical-align: middle;
       flex-shrink: 0;
     }
+    .site-footer .footer-nav {
+      margin-bottom: 0.45rem;
+    }
+    .site-footer .footer-nav a {
+      font-weight: 600;
+      color: #0f6a5c;
+    }
 """
 
 
 def icp_footer_html() -> str:
-    """页脚 HTML：工信部 ICP + 公安备案（含图标）。"""
+    """页脚 HTML：隐私说明 + 工信部 ICP + 公安备案（含图标）。"""
     icon_url = url_for("static", filename=MPS_ICON)
+    privacy_url = url_for("main.privacy")
     return (
         f'<footer class="site-footer">'
+        f'<div class="footer-nav">'
+        f'<a href="{privacy_url}">隐私说明</a>'
+        f"</div>"
         f'<div class="beian-lines">'
         f'<a href="{ICP_URL}" target="_blank" rel="noopener noreferrer">'
         f"{ICP_NUMBER}</a>"

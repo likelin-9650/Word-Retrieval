@@ -20,6 +20,7 @@ def render_settings_page(
     baseline_wordlists: list[str],
 ) -> str:
     home = url_for("main.index")
+    privacy = url_for("main.privacy")
     parse_api = url_for("main.api_parse_wordlist")
     static_js = url_for("static", filename="user_data.js") + "?v=4"
     # 勿对 script 内 JSON 使用 html.escape：script 数据态不解码 &quot;，会导致 JSON.parse 失败
@@ -158,6 +159,7 @@ def render_settings_page(
       服务器保留基准 <strong>ECDICT</strong> 与默认对照表；
       你在本页的增删、自建对照表只保存在<strong>当前浏览器</strong>（localStorage）。
       换设备或清除站点数据会丢失，可用下方导出备份。
+      详见<a href="{privacy}">隐私说明</a>。
     </p>
     <p class="meta"><a href="{home}">← 返回首页</a></p>
     <p class="meta" id="summary"></p>

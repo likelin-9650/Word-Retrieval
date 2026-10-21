@@ -26,6 +26,7 @@ A local Flask web app that extracts English words from `.docx` or pasted text, c
 | 本机数据导出 / 导入 / 清除 | Export / import / clear browser data |
 | 设置里自定义三色（开关 + 色值；确认/结果页同步） | Custom highlight colors (enable + hex; UI synced) |
 | 页脚展示 ICP 与公安备案 | ICP + MPS (Gong’an) beian in footer |
+| 隐私说明（本机存储与临时处理） | Privacy note (local storage & temporary processing) |
 
 ---
 
@@ -37,7 +38,10 @@ A local Flask web app that extracts English words from `.docx` or pasted text, c
 | 公安备案 | 川公网安备51070302110809号 | https://beian.mps.gov.cn/#/query/webSearch?code=51070302110809 |
 
 公安备案图标：`word_retrieval/static/beian-mps.png`。  
-动态页脚由 `word_retrieval/pages/__init__.py` 生成；首页 `index.html` 为静态页脚，**改号时两处同步**。
+动态页脚由 `word_retrieval/pages/__init__.py` 生成；首页 `index.html` 为静态页脚，**改号或改页脚链接时两处同步**。
+
+**隐私说明** `/privacy`：说明本站使用浏览器 localStorage 保存对照表差分、词典覆盖、着色偏好等；提交时仅当次用于分类与生成下载；下载文件在服务器临时缓存约 1 小时；换浏览器或清除站点数据会丢失本机改动（可用设置页导出备份）。页脚「隐私说明」入口指向该页。  
+Privacy note at `/privacy` (footer link): localStorage contents, one-time server use on submit, ~1h download cache, backup via Settings export.
 
 ---
 
@@ -230,7 +234,7 @@ Word-Retrieval/
     ├── static/
     │   ├── user_data.js        # localStorage 读写
     │   └── beian-mps.png       # 公安备案图标
-    └── pages/                  # 确认 / 结果 / 设置等页面（页脚含 ICP + 公安备案）
+    └── pages/                  # 确认 / 结果 / 设置 / 隐私说明等（页脚含 ICP + 公安备案 + 隐私入口）
 ```
 
 生产部署：push 到 GitHub **任意分支**（含 `main` / `feature/*` 等）都会触发 Actions 自动部署到同一台服务器；也可在 Actions 页手动 Run workflow。注意实验分支也会覆盖线上。
