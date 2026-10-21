@@ -21,7 +21,7 @@ def render_settings_page(
 ) -> str:
     home = url_for("main.index")
     parse_api = url_for("main.api_parse_wordlist")
-    static_js = url_for("static", filename="user_data.js") + "?v=3"
+    static_js = url_for("static", filename="user_data.js") + "?v=4"
     # 勿对 script 内 JSON 使用 html.escape：script 数据态不解码 &quot;，会导致 JSON.parse 失败
     baseline_json = json.dumps(baseline_wordlists, ensure_ascii=False).replace(
         "<", "\\u003c"
@@ -118,6 +118,35 @@ def render_settings_page(
     .ok {{ color: var(--accent); }}
     .error {{ color: var(--danger); }}
     #statusLine {{ min-height: 1.4em; }}
+    .color-row {{
+      display: grid; grid-template-columns: 5.5rem 1fr auto auto auto;
+      gap: 0.55rem; align-items: center; margin: 0.55rem 0;
+    }}
+    .color-row .label {{ font-weight: 600; margin: 0; }}
+    .color-row .enable {{
+      display: flex; align-items: center; gap: 0.35rem; font-weight: 500; margin: 0;
+    }}
+    .color-row .enable input {{ width: auto; }}
+    .color-row input[type="color"] {{
+      width: 2.6rem; height: 2.2rem; padding: 0.15rem; cursor: pointer;
+    }}
+    .color-row .hex {{
+      width: 6.5rem; font-family: Consolas, "Courier New", monospace; font-size: 0.9rem;
+    }}
+    @media (max-width: 560px) {{
+      .color-row {{
+        grid-template-columns: 4.5rem 1fr auto;
+        grid-template-areas:
+          "label enable enable"
+          "label picker hex"
+          "label reset reset";
+      }}
+      .color-row .label {{ grid-area: label; }}
+      .color-row .enable {{ grid-area: enable; }}
+      .color-row input[type="color"] {{ grid-area: picker; }}
+      .color-row .hex {{ grid-area: hex; width: 100%; }}
+      .color-row .reset-btn {{ grid-area: reset; }}
+    }}
 {ICP_FOOTER_CSS}
 {EXCHANGE_HELP_CSS}
   </style>
@@ -133,6 +162,35 @@ def render_settings_page(
     <p class="meta"><a href="{home}">← 返回首页</a></p>
     <p class="meta" id="summary"></p>
     <p id="statusLine" class="meta"></p>
+
+    <section class="panel">
+      <h2>着色颜色（本机）</h2>
+      <p class="hint">
+        自定义绿 / 黄 / 红三类在着色 Word 与确认页、结果页上的显示色。
+        「启用」仅控制 Word 是否给该类词上色；关闭后 Word 中该类保持原文色，网页文案仍用所选色。
+      </p>
+      <div class="color-row" data-color-key="green">
+        <span class="label" id="hl-label-green" style="color:#1b8f3a">绿色词</span>
+        <label class="enable"><input type="checkbox" id="hl-en-green" checked />在 Word 中着色</label>
+        <input type="color" id="hl-pick-green" value="#1b8f3a" title="选择颜色" />
+        <input type="text" class="hex" id="hl-hex-green" value="#1b8f3a" maxlength="7" spellcheck="false" />
+        <button type="button" class="secondary reset-btn" id="hl-reset-green">恢复默认</button>
+      </div>
+      <div class="color-row" data-color-key="yellow">
+        <span class="label" id="hl-label-yellow" style="color:#c4a000">黄色词</span>
+        <label class="enable"><input type="checkbox" id="hl-en-yellow" checked />在 Word 中着色</label>
+        <input type="color" id="hl-pick-yellow" value="#c4a000" title="选择颜色" />
+        <input type="text" class="hex" id="hl-hex-yellow" value="#c4a000" maxlength="7" spellcheck="false" />
+        <button type="button" class="secondary reset-btn" id="hl-reset-yellow">恢复默认</button>
+      </div>
+      <div class="color-row" data-color-key="red">
+        <span class="label" id="hl-label-red" style="color:#c62828">红色词</span>
+        <label class="enable"><input type="checkbox" id="hl-en-red" checked />在 Word 中着色</label>
+        <input type="color" id="hl-pick-red" value="#c62828" title="选择颜色" />
+        <input type="text" class="hex" id="hl-hex-red" value="#c62828" maxlength="7" spellcheck="false" />
+        <button type="button" class="secondary reset-btn" id="hl-reset-red">恢复默认</button>
+      </div>
+    </section>
 
     <section class="panel">
       <h2>编辑大词典覆盖（本机）</h2>
@@ -289,6 +347,47 @@ def render_settings_page(
       el.textContent = text;
     }}
 
+    const COLOR_KEYS = ["green", "yellow", "red"];
+    const COLOR_LABELS = {{ green: "绿色词", yellow: "黄色词", red: "红色词" }};
+
+    function readHighlightFromForm() {{
+      const hl = UserDataStore.defaultHighlight();
+      COLOR_KEYS.forEach((key) => {{
+        const en = document.getElementById("hl-en-" + key);
+        const hexEl = document.getElementById("hl-hex-" + key);
+        hl[key].enabled = !!(en && en.checked);
+        const hex = String((hexEl && hexEl.value) || "").trim();
+        if (/^#[0-9a-fA-F]{{6}}$/.test(hex)) hl[key].hex = hex.toLowerCase();
+      }});
+      return UserDataStore.normalizeHighlight(hl);
+    }}
+
+    function applyHighlightToForm(highlight) {{
+      const hl = UserDataStore.normalizeHighlight(highlight);
+      COLOR_KEYS.forEach((key) => {{
+        const en = document.getElementById("hl-en-" + key);
+        const pick = document.getElementById("hl-pick-" + key);
+        const hexEl = document.getElementById("hl-hex-" + key);
+        const label = document.getElementById("hl-label-" + key);
+        if (en) en.checked = !!hl[key].enabled;
+        if (pick) pick.value = hl[key].hex;
+        if (hexEl) hexEl.value = hl[key].hex;
+        if (label) {{
+          label.textContent = COLOR_LABELS[key];
+          label.style.color = hl[key].hex;
+        }}
+      }});
+    }}
+
+    function saveHighlightFromForm(statusMsg) {{
+      const data = UserDataStore.load();
+      data.highlight = readHighlightFromForm();
+      UserDataStore.save(data);
+      applyHighlightToForm(data.highlight);
+      if (statusMsg) setStatus(statusMsg);
+      summary.textContent = UserDataStore.summaryText();
+    }}
+
     function refresh() {{
       summary.textContent = UserDataStore.summaryText();
       UserDataStore.mergeWordlistOptions(
@@ -297,6 +396,7 @@ def render_settings_page(
       );
       const data = UserDataStore.load();
       renderDictExtraList(data);
+      applyHighlightToForm(data.highlight);
       const del = document.getElementById("del_list");
       del.innerHTML = "";
       const customs = Object.keys(data.custom_lists).sort();
@@ -314,6 +414,50 @@ def render_settings_page(
         }});
       }}
     }}
+
+    COLOR_KEYS.forEach((key) => {{
+      const en = document.getElementById("hl-en-" + key);
+      const pick = document.getElementById("hl-pick-" + key);
+      const hexEl = document.getElementById("hl-hex-" + key);
+      const reset = document.getElementById("hl-reset-" + key);
+      if (en) {{
+        en.addEventListener("change", () => saveHighlightFromForm("已更新着色开关。"));
+      }}
+      if (pick) {{
+        pick.addEventListener("input", () => {{
+          if (hexEl) hexEl.value = pick.value;
+          const label = document.getElementById("hl-label-" + key);
+          if (label) label.style.color = pick.value;
+          saveHighlightFromForm("已更新着色颜色。");
+        }});
+      }}
+      if (hexEl) {{
+        hexEl.addEventListener("change", () => {{
+          let v = String(hexEl.value || "").trim();
+          if (v && v[0] !== "#") v = "#" + v;
+          if (!/^#[0-9a-fA-F]{{6}}$/.test(v)) {{
+            setStatus("颜色须为 #rrggbb 六位十六进制。", true);
+            applyHighlightToForm(UserDataStore.load().highlight);
+            return;
+          }}
+          hexEl.value = v.toLowerCase();
+          if (pick) pick.value = hexEl.value;
+          saveHighlightFromForm("已更新着色颜色。");
+        }});
+      }}
+      if (reset) {{
+        reset.addEventListener("click", () => {{
+          const defaults = UserDataStore.defaultHighlight();
+          const data = UserDataStore.load();
+          data.highlight = UserDataStore.normalizeHighlight(data.highlight);
+          data.highlight[key] = defaults[key];
+          UserDataStore.save(data);
+          applyHighlightToForm(data.highlight);
+          setStatus("已恢复「" + COLOR_LABELS[key] + "」默认色。");
+          summary.textContent = UserDataStore.summaryText();
+        }});
+      }}
+    }});
 
     function ensureName(raw) {{
       let name = String(raw || "").trim();
@@ -621,7 +765,7 @@ def render_settings_page(
     }});
 
     document.getElementById("btnClear").addEventListener("click", () => {{
-      if (!confirm("确定清除本浏览器中全部对照表差分、自建表与词典覆盖？")) return;
+      if (!confirm("确定清除本浏览器中全部对照表差分、自建表、词典覆盖与着色偏好？")) return;
       UserDataStore.clear();
       setStatus("已清除本机全部改动。");
       refresh();

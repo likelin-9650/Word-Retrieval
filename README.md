@@ -24,6 +24,7 @@ A local Flask web app that extracts English words from `.docx` or pasted text, c
 | 上传时可扩展派生词（ECDICT exchange + 可选 lemminflect） | Optional inflection expansion |
 | 大词典 = ECDICT 词头 ∪ 本机增补词条 − 本机排除 | ECDICT ∪ browser entries − browser exclude |
 | 本机数据导出 / 导入 / 清除 | Export / import / clear browser data |
+| 设置里自定义三色（开关 + 色值；确认/结果页同步） | Custom highlight colors (enable + hex; UI synced) |
 | 页脚展示 ICP 与公安备案 | ICP + MPS (Gong’an) beian in footer |
 
 ---
@@ -178,11 +179,12 @@ python app.py
 2. **确认页**：按绿/黄/红勾选（见上文）；黄词勾「大词典」须填中文释义（词性写在释义里）；写回本浏览器。  
 3. **结果页**：下载着色文档（若上传了 Word）与释义表；本机差分自动保存。  
 4. **设置** `/settings`：  
+   - **着色颜色**：绿 / 黄 / 红各可开关（仅影响 Word 是否上色）与自定义 `#rrggbb`；确认页、结果页文案色同步  
    - 编辑本机词典覆盖（完整 ECDICT 词条）/ 对照表差分  
    - 新建**空**对照表（本机）  
    - **上传 `.txt`** 创建对照表（服务器仅校验，可选派生词；结果存本机）  
    - 删除本机自建对照表（基准 `words.txt` 等不可删）  
-   - **导出 / 导入 / 清除**本机数据  
+   - **导出 / 导入 / 清除**本机数据（含着色偏好）  
 
 上传文档大小上限约 **16MB**；会话与下载缓存约 **1 小时**（释义表/着色文档会短暂缓存在服务器 `.cache/downloads/`，过期清理）。
 

@@ -23,13 +23,20 @@ def render_result_page(
     saved_count: int = 0,
     removed_count: int = 0,
     user_data_json: str = "",
+    highlight: dict | None = None,
 ) -> str:
     """生成展示提取结果的 HTML 页面。"""
+    from word_retrieval.user_data import normalize_highlight
+
     green_sorted = sorted(green_words)
     yellow_sorted = sorted(yellow_words)
     red_sorted = sorted(red_words)
     total = len(green_sorted) + len(yellow_sorted) + len(red_sorted)
     home = url_for("main.index")
+    hl = normalize_highlight(highlight)
+    known_hex = hl["green"]["hex"]
+    proper_hex = hl["yellow"]["hex"]
+    unknown_hex = hl["red"]["hex"]
 
     def render_list(words: list[str], css_class: str, empty_text: str) -> str:
         if not words:
@@ -102,9 +109,9 @@ def render_result_page(
       --accent-hover: #0b5449;
       --line: #c5d2da;
       --surface: rgba(255, 255, 255, 0.72);
-      --known: #1b8f3a;
-      --proper: #c4a000;
-      --unknown: #c62828;
+      --known: {known_hex};
+      --proper: {proper_hex};
+      --unknown: {unknown_hex};
     }}
     * {{ box-sizing: border-box; }}
     body {{
@@ -204,7 +211,7 @@ def render_result_page(
   </main>
   {footer}
   <script type="application/json" id="user-data-payload">{safe_json}</script>
-  <script src="{url_for('static', filename='user_data.js')}?v=3"></script>
+  <script src="{url_for('static', filename='user_data.js')}?v=4"></script>
   <script>
     (function () {{
       const el = document.getElementById("user-data-payload");

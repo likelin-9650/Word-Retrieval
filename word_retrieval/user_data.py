@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,44 @@ DICT_ENTRY_FIELDS = (
     "exchange",
 )
 
+HIGHLIGHT_KEYS = ("green", "yellow", "red")
+DEFAULT_HIGHLIGHT: dict[str, dict[str, Any]] = {
+    "green": {"enabled": True, "hex": "#1b8f3a"},
+    "yellow": {"enabled": True, "hex": "#c4a000"},
+    "red": {"enabled": True, "hex": "#c62828"},
+}
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def default_highlight() -> dict[str, dict[str, Any]]:
+    return deepcopy(DEFAULT_HIGHLIGHT)
+
+
+def normalize_highlight(raw: Any) -> dict[str, dict[str, Any]]:
+    """规范化着色偏好；非法项回退默认。"""
+    out = default_highlight()
+    if not isinstance(raw, dict):
+        return out
+    for key in HIGHLIGHT_KEYS:
+        item = raw.get(key)
+        if not isinstance(item, dict):
+            continue
+        enabled = item.get("enabled", out[key]["enabled"])
+        if isinstance(enabled, bool):
+            out[key]["enabled"] = enabled
+        elif enabled in (0, 1, "0", "1", "true", "false", "True", "False"):
+            out[key]["enabled"] = str(enabled).lower() in ("1", "true")
+        hex_raw = str(item.get("hex") or "").strip()
+        if _HEX_RE.fullmatch(hex_raw):
+            out[key]["hex"] = hex_raw.lower()
+    return out
+
+
+def get_highlight(user_data: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    if not user_data:
+        return default_highlight()
+    return normalize_highlight(user_data.get("highlight"))
+
 
 def empty_user_data() -> dict[str, Any]:
     return {
@@ -34,6 +73,7 @@ def empty_user_data() -> dict[str, Any]:
         "dict_exclude": [],
         "patches": {},
         "custom_lists": {},
+        "highlight": default_highlight(),
     }
 
 
@@ -156,6 +196,7 @@ def parse_user_data(raw: str | None) -> dict[str, Any]:
                 normalize_words(_as_str_list(words))
             )
 
+    data["highlight"] = normalize_highlight(parsed.get("highlight"))
     return data
 
 
@@ -166,6 +207,7 @@ def dump_user_data(data: dict[str, Any]) -> str:
         "dict_exclude": sorted(normalize_words(data.get("dict_exclude") or [])),
         "patches": {},
         "custom_lists": {},
+        "highlight": normalize_highlight(data.get("highlight")),
     }
     for name, patch in (data.get("patches") or {}).items():
         key = _safe_list_filename(str(name))

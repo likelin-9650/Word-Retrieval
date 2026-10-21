@@ -10,6 +10,41 @@
   const STORAGE_KEY = "word-retrieval-user-data";
   const SELECTED_KEY = "word-retrieval-selected-wordlist";
   const VERSION = 2;
+  const HIGHLIGHT_KEYS = ["green", "yellow", "red"];
+  const DEFAULT_HIGHLIGHT = {
+    green: { enabled: true, hex: "#1b8f3a" },
+    yellow: { enabled: true, hex: "#c4a000" },
+    red: { enabled: true, hex: "#c62828" },
+  };
+  const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+  function defaultHighlight() {
+    return {
+      green: { enabled: true, hex: "#1b8f3a" },
+      yellow: { enabled: true, hex: "#c4a000" },
+      red: { enabled: true, hex: "#c62828" },
+    };
+  }
+
+  function normalizeHighlight(raw) {
+    const out = defaultHighlight();
+    if (!raw || typeof raw !== "object") return out;
+    HIGHLIGHT_KEYS.forEach((key) => {
+      const item = raw[key];
+      if (!item || typeof item !== "object") return;
+      if (typeof item.enabled === "boolean") out[key].enabled = item.enabled;
+      else if (item.enabled === 0 || item.enabled === 1)
+        out[key].enabled = !!item.enabled;
+      else if (typeof item.enabled === "string") {
+        const s = item.enabled.toLowerCase();
+        if (s === "true" || s === "1") out[key].enabled = true;
+        else if (s === "false" || s === "0") out[key].enabled = false;
+      }
+      const hex = String(item.hex || "").trim();
+      if (HEX_RE.test(hex)) out[key].hex = hex.toLowerCase();
+    });
+    return out;
+  }
 
   function emptyData() {
     return {
@@ -18,6 +53,7 @@
       dict_exclude: [],
       patches: {},
       custom_lists: {},
+      highlight: defaultHighlight(),
     };
   }
 
@@ -110,6 +146,7 @@
         dict_exclude: normalizeWords(parsed.dict_exclude),
         patches: sanitizePatches(parsed.patches),
         custom_lists: sanitizeCustoms(parsed.custom_lists),
+        highlight: normalizeHighlight(parsed.highlight),
       };
     } catch (_) {
       return emptyData();
@@ -159,6 +196,7 @@
       dict_exclude: normalizeWords(data.dict_exclude),
       patches: sanitizePatches(data.patches),
       custom_lists: sanitizeCustoms(data.custom_lists),
+      highlight: normalizeHighlight(data && data.highlight),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     return payload;
@@ -277,10 +315,13 @@
 
   global.UserDataStore = {
     STORAGE_KEY,
+    DEFAULT_HIGHLIGHT,
     emptyData,
     emptyDictEntry,
     normalizeDictEntry,
     normalizeDictExtra,
+    defaultHighlight,
+    normalizeHighlight,
     load,
     save,
     dump,

@@ -102,7 +102,10 @@ def render_confirm_page(
     green_words: set[str],
     yellow_words: set[str],
     red_words: set[str],
+    highlight: dict | None = None,
 ) -> str:
+    from word_retrieval.user_data import normalize_highlight
+
     green_sorted = sorted(green_words)
     yellow_sorted = sorted(yellow_words)
     red_sorted = sorted(red_words)
@@ -110,6 +113,10 @@ def render_confirm_page(
     home = url_for("main.index")
     action = url_for("main.confirm")
     footer = icp_footer_html()
+    hl = normalize_highlight(highlight)
+    known_hex = hl["green"]["hex"]
+    proper_hex = hl["yellow"]["hex"]
+    unknown_hex = hl["red"]["hex"]
 
     green_html = _green_list(green_sorted)
     yellow_html = _dual_target_yellow_list(yellow_sorted)
@@ -131,9 +138,9 @@ def render_confirm_page(
       --accent-hover: #0b5449;
       --line: #c5d2da;
       --surface: rgba(255, 255, 255, 0.72);
-      --known: #1b8f3a;
-      --proper: #c4a000;
-      --unknown: #c62828;
+      --known: {known_hex};
+      --proper: {proper_hex};
+      --unknown: {unknown_hex};
     }}
     * {{ box-sizing: border-box; }}
     body {{

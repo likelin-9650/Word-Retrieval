@@ -31,6 +31,7 @@ from word_retrieval.user_data import (
     client_dict_entries_map,
     client_dict_overrides,
     dump_user_data,
+    get_highlight,
     is_custom_wordlist,
     parse_user_data,
     resolve_known_words,
@@ -187,6 +188,7 @@ def _begin_review(
         green_words=green,
         yellow_words=yellow,
         red_words=red,
+        highlight=get_highlight(user_data),
     )
 
 
@@ -251,6 +253,7 @@ def _finalize_session(
                 green=doc_green,
                 yellow=doc_yellow,
                 red=doc_red,
+                highlight=get_highlight(updated_user_data),
             )
         except Exception as exc:  # noqa: BLE001
             return render_message_page("处理失败", f"文档着色出错：{exc}", status=500)
@@ -311,6 +314,7 @@ def _finalize_session(
         saved_count=saved_count,
         removed_count=removed_count,
         user_data_json=dump_user_data(updated_user_data),
+        highlight=get_highlight(updated_user_data),
     )
 
 
