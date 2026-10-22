@@ -14,10 +14,10 @@ from word_retrieval.lexicon import (
     resolve_wordlist_path,
 )
 
-USER_DATA_VERSION = 2
+USER_DATA_VERSION = 3
 
 # 与 ECDICT 词条字段对齐；新增时仅 translation（中文释义）必填，
-# 词性请写在中文释义里（如「n. 苹果」）；pos 字段保留兼容，可为空。
+# 建议把词性写在中文释义里（如「n. 苹果」）；pos 字段保留兼容，可为空。
 DICT_ENTRY_FIELDS = (
     "word",
     "phonetic",
@@ -27,6 +27,14 @@ DICT_ENTRY_FIELDS = (
     "exchange",
 )
 
+VOCAB_OUTPUT_KEYS = ("phonetic", "translation", "definition", "exchange")
+DEFAULT_VOCAB_OUTPUT: dict[str, bool] = {
+    "phonetic": True,
+    "translation": True,
+    "definition": False,
+    "exchange": False,
+}
+
 HIGHLIGHT_KEYS = ("green", "yellow", "red")
 DEFAULT_HIGHLIGHT: dict[str, dict[str, Any]] = {
     "green": {"enabled": True, "hex": "#1b8f3a"},
@@ -34,6 +42,32 @@ DEFAULT_HIGHLIGHT: dict[str, dict[str, Any]] = {
     "red": {"enabled": True, "hex": "#c62828"},
 }
 _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def default_vocab_output() -> dict[str, bool]:
+    return dict(DEFAULT_VOCAB_OUTPUT)
+
+
+def normalize_vocab_output(raw: Any) -> dict[str, bool]:
+    """规范化释义表输出字段开关；缺省用默认值。"""
+    out = default_vocab_output()
+    if not isinstance(raw, dict):
+        return out
+    for key in VOCAB_OUTPUT_KEYS:
+        if key not in raw:
+            continue
+        val = raw.get(key)
+        if isinstance(val, bool):
+            out[key] = val
+        elif val in (0, 1, "0", "1", "true", "false", "True", "False"):
+            out[key] = str(val).lower() in ("1", "true")
+    return out
+
+
+def get_vocab_output(user_data: dict[str, Any] | None) -> dict[str, bool]:
+    if not user_data:
+        return default_vocab_output()
+    return normalize_vocab_output(user_data.get("vocab_output"))
 
 
 def default_highlight() -> dict[str, dict[str, Any]]:
@@ -74,6 +108,7 @@ def empty_user_data() -> dict[str, Any]:
         "patches": {},
         "custom_lists": {},
         "highlight": default_highlight(),
+        "vocab_output": default_vocab_output(),
     }
 
 
@@ -118,9 +153,7 @@ def normalize_dict_entry(
         entry[key] = str(raw.get(key) or "").strip()
     if require_gloss:
         if not entry["translation"]:
-            raise ValueError(
-                f"「{word}」加入大词典时必须填写中文释义（请同时写上词性，如 n. 苹果）。"
-            )
+            raise ValueError(f"「{word}」加入大词典时必须填写中文释义。")
     return entry
 
 
@@ -197,6 +230,7 @@ def parse_user_data(raw: str | None) -> dict[str, Any]:
             )
 
     data["highlight"] = normalize_highlight(parsed.get("highlight"))
+    data["vocab_output"] = normalize_vocab_output(parsed.get("vocab_output"))
     return data
 
 
@@ -208,6 +242,7 @@ def dump_user_data(data: dict[str, Any]) -> str:
         "patches": {},
         "custom_lists": {},
         "highlight": normalize_highlight(data.get("highlight")),
+        "vocab_output": normalize_vocab_output(data.get("vocab_output")),
     }
     for name, patch in (data.get("patches") or {}).items():
         key = _safe_list_filename(str(name))

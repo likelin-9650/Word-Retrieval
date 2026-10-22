@@ -9,14 +9,41 @@
 (function (global) {
   const STORAGE_KEY = "word-retrieval-user-data";
   const SELECTED_KEY = "word-retrieval-selected-wordlist";
-  const VERSION = 2;
+  const VERSION = 3;
   const HIGHLIGHT_KEYS = ["green", "yellow", "red"];
+  const VOCAB_OUTPUT_KEYS = ["phonetic", "translation", "definition", "exchange"];
   const DEFAULT_HIGHLIGHT = {
     green: { enabled: true, hex: "#1b8f3a" },
     yellow: { enabled: true, hex: "#c4a000" },
     red: { enabled: true, hex: "#c62828" },
   };
   const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+  function defaultVocabOutput() {
+    return {
+      phonetic: true,
+      translation: true,
+      definition: false,
+      exchange: false,
+    };
+  }
+
+  function normalizeVocabOutput(raw) {
+    const out = defaultVocabOutput();
+    if (!raw || typeof raw !== "object") return out;
+    VOCAB_OUTPUT_KEYS.forEach((key) => {
+      if (!(key in raw)) return;
+      const val = raw[key];
+      if (typeof val === "boolean") out[key] = val;
+      else if (val === 0 || val === 1) out[key] = !!val;
+      else if (typeof val === "string") {
+        const s = val.toLowerCase();
+        if (s === "true" || s === "1") out[key] = true;
+        else if (s === "false" || s === "0") out[key] = false;
+      }
+    });
+    return out;
+  }
 
   function defaultHighlight() {
     return {
@@ -54,6 +81,7 @@
       patches: {},
       custom_lists: {},
       highlight: defaultHighlight(),
+      vocab_output: defaultVocabOutput(),
     };
   }
 
@@ -103,9 +131,7 @@
     entry.exchange = String(raw.exchange || "").trim();
     if (requireGloss) {
       if (!entry.translation) {
-        throw new Error(
-          "「" + word + "」加入大词典时必须填写中文释义（请同时写上词性，如 n. 苹果）。"
-        );
+        throw new Error("「" + word + "」加入大词典时必须填写中文释义。");
       }
     }
     return entry;
@@ -147,6 +173,7 @@
         patches: sanitizePatches(parsed.patches),
         custom_lists: sanitizeCustoms(parsed.custom_lists),
         highlight: normalizeHighlight(parsed.highlight),
+        vocab_output: normalizeVocabOutput(parsed.vocab_output),
       };
     } catch (_) {
       return emptyData();
@@ -197,6 +224,7 @@
       patches: sanitizePatches(data.patches),
       custom_lists: sanitizeCustoms(data.custom_lists),
       highlight: normalizeHighlight(data && data.highlight),
+      vocab_output: normalizeVocabOutput(data && data.vocab_output),
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     return payload;
@@ -322,6 +350,8 @@
     normalizeDictExtra,
     defaultHighlight,
     normalizeHighlight,
+    defaultVocabOutput,
+    normalizeVocabOutput,
     load,
     save,
     dump,

@@ -22,7 +22,7 @@ def render_settings_page(
     home = url_for("main.index")
     privacy = url_for("main.privacy")
     parse_api = url_for("main.api_parse_wordlist")
-    static_js = url_for("static", filename="user_data.js") + "?v=4"
+    static_js = url_for("static", filename="user_data.js") + "?v=5"
     # 勿对 script 内 JSON 使用 html.escape：script 数据态不解码 &quot;，会导致 JSON.parse 失败
     baseline_json = json.dumps(baseline_wordlists, ensure_ascii=False).replace(
         "<", "\\u003c"
@@ -195,16 +195,40 @@ def render_settings_page(
     </section>
 
     <section class="panel">
+      <h2>释义表输出（本机）</h2>
+      <p class="hint">
+        控制下载释义表右列包含哪些 ECDICT 信息。词形还原提示（如「词形还原 → run」）始终显示，不可关闭。
+        不输出独立词性栏；中文释义内通常已含词性标记。
+      </p>
+      <label class="check">
+        <input type="checkbox" id="vo-phonetic" checked />
+        音标
+      </label>
+      <label class="check">
+        <input type="checkbox" id="vo-translation" checked />
+        中文释义（释义内通常已含词性，如 n. / v.）
+      </label>
+      <label class="check">
+        <input type="checkbox" id="vo-definition" />
+        英文释义
+      </label>
+      <label class="check">
+        <input type="checkbox" id="vo-exchange" />
+        词形变化（exchange）
+      </label>
+      <div class="row"><button type="button" id="btnVocabOutput">保存释义表输出选项</button></div>
+    </section>
+
+    <section class="panel">
       <h2>编辑大词典覆盖（本机）</h2>
       <p class="hint">
         基础词表为服务器 ECDICT。增补写入完整词条（与 ECDICT 字段对齐）：
-        <strong>中文释义必填</strong>（请在释义中同时写上词性，如 <code>n. 苹果</code>）；
-        音标、英文释义、词形变化可选。「排除」只填词头即可。
+        <strong>中文释义必填</strong>；音标、英文释义、词形变化可选。「排除」只填词头即可。
       </p>
       <label for="dict_word">单词 <span style="color:var(--danger)">*</span></label>
       <input id="dict_word" type="text" placeholder="apple" />
       <label for="dict_translation">中文释义 <span style="color:var(--danger)">*</span></label>
-      <p class="hint" style="margin-top:0">请同时写上词性，例如：<code>n. 苹果</code> 或 <code>v. 运行；n. 奔跑</code>。</p>
+      <p class="hint" style="margin-top:0">建议在写释义时带上词性，例如：<code>n. 苹果</code> 或 <code>v. 运行；n. 奔跑</code>。</p>
       <textarea id="dict_translation" placeholder="n. 苹果"></textarea>
       <label for="dict_phonetic">音标（可选）</label>
       <input id="dict_phonetic" type="text" placeholder="ˈæpl" />
@@ -390,6 +414,29 @@ def render_settings_page(
       summary.textContent = UserDataStore.summaryText();
     }}
 
+    function applyVocabOutputToForm(vocabOutput) {{
+      const vo = UserDataStore.normalizeVocabOutput(vocabOutput);
+      const map = {{
+        phonetic: "vo-phonetic",
+        translation: "vo-translation",
+        definition: "vo-definition",
+        exchange: "vo-exchange",
+      }};
+      Object.keys(map).forEach((key) => {{
+        const el = document.getElementById(map[key]);
+        if (el) el.checked = !!vo[key];
+      }});
+    }}
+
+    function readVocabOutputFromForm() {{
+      return UserDataStore.normalizeVocabOutput({{
+        phonetic: !!(document.getElementById("vo-phonetic") || {{}}).checked,
+        translation: !!(document.getElementById("vo-translation") || {{}}).checked,
+        definition: !!(document.getElementById("vo-definition") || {{}}).checked,
+        exchange: !!(document.getElementById("vo-exchange") || {{}}).checked,
+      }});
+    }}
+
     function refresh() {{
       summary.textContent = UserDataStore.summaryText();
       UserDataStore.mergeWordlistOptions(
@@ -399,6 +446,7 @@ def render_settings_page(
       const data = UserDataStore.load();
       renderDictExtraList(data);
       applyHighlightToForm(data.highlight);
+      applyVocabOutputToForm(data.vocab_output);
       const del = document.getElementById("del_list");
       del.innerHTML = "";
       const customs = Object.keys(data.custom_lists).sort();
@@ -478,6 +526,19 @@ def render_settings_page(
         if (el) el.value = "";
       }});
     }}
+
+    document.getElementById("btnVocabOutput").addEventListener("click", () => {{
+      try {{
+        const data = UserDataStore.load();
+        data.vocab_output = readVocabOutputFromForm();
+        UserDataStore.save(data);
+        applyVocabOutputToForm(data.vocab_output);
+        setStatus("已保存释义表输出选项。");
+        refresh();
+      }} catch (err) {{
+        setStatus(String(err.message || err), true);
+      }}
+    }});
 
     document.getElementById("btnDictAdd").addEventListener("click", () => {{
       try {{
@@ -767,7 +828,7 @@ def render_settings_page(
     }});
 
     document.getElementById("btnClear").addEventListener("click", () => {{
-      if (!confirm("确定清除本浏览器中全部对照表差分、自建表、词典覆盖与着色偏好？")) return;
+      if (!confirm("确定清除本浏览器中全部对照表差分、自建表、词典覆盖、着色与释义表输出偏好？")) return;
       UserDataStore.clear();
       setStatus("已清除本机全部改动。");
       refresh();

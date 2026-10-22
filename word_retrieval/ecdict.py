@@ -27,22 +27,48 @@ class DictEntry:
     exchange: str = ""
     matched_as: str = ""  # 实际命中的词形（可能是原形）
 
-    def format_text(self, *, include_english: bool = False) -> str:
-        """格式化为适合写入生词表的多行释义。"""
+    def format_text(
+        self,
+        *,
+        include_english: bool | None = None,
+        vocab_output: dict[str, bool] | None = None,
+    ) -> str:
+        """
+        格式化为适合写入生词表的多行释义。
+
+        vocab_output 控制 phonetic / translation / definition / exchange；
+        词形还原提示始终输出；永不输出独立 pos 行。
+        include_english 为旧参数：仅在未传 vocab_output 时生效（True 等价于打开 definition）。
+        """
+        flags = {
+            "phonetic": True,
+            "translation": True,
+            "definition": False,
+            "exchange": False,
+        }
+        if isinstance(vocab_output, dict):
+            for key in flags:
+                if key in vocab_output:
+                    flags[key] = bool(vocab_output[key])
+        elif include_english is not None:
+            flags["definition"] = bool(include_english)
+
         lines: list[str] = []
         if self.matched_as and self.matched_as.lower() != self.word.lower():
             lines.append(f"（词形还原 → {self.matched_as}）")
-        phonetic = (self.phonetic or "").strip()
-        if phonetic:
-            lines.append(phonetic if phonetic.startswith("/") else f"/{phonetic}/")
-        pos = (self.pos or "").strip()
-        if pos:
-            lines.append(f"[{pos}]")
-        exchange = (self.exchange or "").strip()
-        if exchange:
-            lines.append(f"（词形：{exchange}）")
-        lines.extend(_split_field(self.translation))
-        if include_english:
+        if flags["phonetic"]:
+            phonetic = (self.phonetic or "").strip()
+            if phonetic:
+                lines.append(
+                    phonetic if phonetic.startswith("/") else f"/{phonetic}/"
+                )
+        if flags["exchange"]:
+            exchange = (self.exchange or "").strip()
+            if exchange:
+                lines.append(f"（词形：{exchange}）")
+        if flags["translation"]:
+            lines.extend(_split_field(self.translation))
+        if flags["definition"]:
             eng = _split_field(self.definition)
             if eng:
                 lines.append("——")
@@ -175,35 +201,44 @@ def lookup_definitions(
     *,
     include_english: bool = False,
     client_entries: dict[str, dict] | None = None,
-) -> dict[str, str]:
+    vocab_output: dict[str, bool] | None = None,
+) -> dict[str, str | None]:
     """
     批量查词，返回 {小写词: 格式化释义}。
-    未命中时值为空字符串。
+    未命中时值为 None（与「命中但输出开关全关导致空串」区分）。
     client_entries：本机 ECDICT 增补；若该词有非空中文释义则优先于服务器 ECDICT。
+    vocab_output：释义表字段开关（与设置页一致）；未传时可用 include_english 兼容旧调用。
     """
     if not words:
         return {}
+    flags = vocab_output
+    if flags is None and include_english:
+        flags = {
+            "phonetic": True,
+            "translation": True,
+            "definition": True,
+            "exchange": False,
+        }
     overlay = {
         str(k).strip().lower(): v
         for k, v in (client_entries or {}).items()
         if str(k).strip() and isinstance(v, dict)
     }
     with Ecdict(db_path) as dic:
-        result: dict[str, str] = {}
+        result: dict[str, str | None] = {}
         for word in words:
             key = word.strip().lower()
             if not key or key in result:
                 continue
             client = overlay.get(key)
             if client and str(client.get("translation") or "").strip():
-                # 本机增补：有英文释义则一并输出（用户可选填写）
                 result[key] = entry_from_client(client).format_text(
-                    include_english=True
+                    vocab_output=flags
                 )
                 continue
             entry = dic.lookup(word)
             result[key] = (
-                entry.format_text(include_english=include_english) if entry else ""
+                entry.format_text(vocab_output=flags) if entry else None
             )
         return result
 

@@ -40,10 +40,10 @@ def _dual_target_yellow_list(words: list[str]) -> str:
             f"</div>"
             f'<div class="dict-fields" hidden>'
             f'<p class="field-hint">加入大词典须填写与 ECDICT 对齐的词条：'
-            f'<strong>中文释义必填</strong>（请在释义中同时写上词性，如 '
+            f'<strong>中文释义必填</strong>；建议在释义中写上词性（如 '
             f'<code>n. 苹果</code>）；音标、英文释义、词形变化可选。</p>'
             f'<label>中文释义 <span class="req">*</span>'
-            f'<span class="field-subhint">请同时写上词性，例如：n. 苹果 / v. 运行</span>'
+            f'<span class="field-subhint">建议写释义时带上词性，例如：n. 苹果 / v. 运行</span>'
             f'<textarea class="dict-translation" rows="2" '
             f'placeholder="n. 苹果"></textarea></label>'
             f'<div class="field-grid">'
@@ -271,7 +271,7 @@ def render_confirm_page(
 
       <section class="panel" data-group="yellow">
         <h2 style="color:var(--proper)">黄色词 — 可加入对照表 / 大词典（ECDICT 增补） / 二者都加</h2>
-        <p class="hint">每个词可单独勾选目标；两者都勾选即同时加入。<strong>写入本浏览器</strong>，不改服务器基准文件。勾选「大词典」时须填写<strong>中文释义</strong>（请在释义里写上词性，如 n. 苹果；音标、英文释义、词形变化可选）。</p>
+        <p class="hint">每个词可单独勾选目标；两者都勾选即同时加入。<strong>写入本浏览器</strong>，不改服务器基准文件。勾选「大词典」时须填写<strong>中文释义</strong>（建议写释义时带上词性，如 n. 苹果；音标、英文释义、词形变化可选）。</p>
         <div class="toolbar">
           <button type="button" data-action="words-all">对照表全选</button>
           <button type="button" data-action="words-none">对照表全不选</button>
@@ -407,7 +407,7 @@ def render_confirm_page(
           ev.preventDefault();
           formError.style.display = "block";
           formError.textContent =
-            "勾选「大词典」的词须填写中文释义（请同时写上词性，如 n. 苹果）："
+            "勾选「大词典」的词须填写中文释义："
             + missing.slice(0, 8).join("、")
             + (missing.length > 8 ? "…" : "");
           return;

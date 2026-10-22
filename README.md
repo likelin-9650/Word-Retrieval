@@ -18,7 +18,7 @@ A local Flask web app that extracts English words from `.docx` or pasted text, c
 | 绿 / 黄 / 红三色分类 | Three-color classification |
 | 确认页精细勾选（释义表 / 对照表 / 大词典） | Confirm-page checkboxes |
 | 下载三色标注 Word | Download color-highlighted `.docx` |
-| ECDICT 本地释义（音标、词性、义项） | Offline ECDICT definitions |
+| ECDICT 本地释义（可配置输出字段） | Offline ECDICT definitions (configurable fields) |
 | 服务器提供基准对照表；个人改动存本浏览器 | Server baselines; personal edits in the browser |
 | 多份对照表；可上传 `.txt` 创建（存本机） | Multiple wordlists; create from `.txt` (browser-local) |
 | 上传时可扩展派生词（ECDICT exchange + 可选 lemminflect） | Optional inflection expansion |
@@ -81,9 +81,11 @@ Server keeps ECDICT and baseline checklists. Your edits live in the browser only
 
 设置页与确认页的增补/排除写在**本浏览器**，不直接改 ECDICT，也不再依赖服务器上的 `dict_extra.txt` / `dict_exclude.txt` 作为网页用户数据。
 
-本机增补存为与 ECDICT 对齐的**完整词条**（`word` / `phonetic` / `definition` / `translation` / `pos` / `exchange`）：**中文释义必填**（请在释义中写上词性，如 `n. 苹果`；无单独词性栏），音标、英文释义、词形变化可选。查释义时，本机有中文释义的词条优先于服务器 ECDICT。旧版仅词头的 `dict_extra` 字符串列表仍可导入（仅参与分类，无释义）。
+本机增补存为与 ECDICT 对齐的**完整词条**（`word` / `phonetic` / `definition` / `translation` / `pos` / `exchange`）：**中文释义必填**（建议在释义中写上词性，如 `n. 苹果`；无单独词性栏），音标、英文释义、词形变化可选。查释义时，本机有中文释义的词条优先于服务器 ECDICT。旧版仅词头的 `dict_extra` 字符串列表仍可导入（仅参与分类，无释义）。
 
-Client dictionary add-ons are full ECDICT-style entries stored in the browser (**Chinese gloss required**; write POS inside the gloss, e.g. `n. apple`). Optional: phonetic, English definition, exchange. Client entries with a Chinese gloss override server ECDICT on lookup.
+**释义表输出**（设置页，存本机 `vocab_output`）：可勾选音标、中文释义、英文释义、词形变化；默认勾选音标与中文释义。词形还原提示始终显示；不输出独立 `pos` 行（中文释义内通常已含词性）。
+
+Client dictionary add-ons are full ECDICT-style entries (**Chinese gloss required**; recommended to include POS in the gloss). Settings → **vocab sheet fields** (`vocab_output`): phonetic / translation / definition / exchange; defaults phonetic+translation. Lemma-hint always on; never emit standalone `[pos]`.
 
 ### 三色含义 · Colors
 
@@ -103,7 +105,7 @@ Client dictionary add-ons are full ECDICT-style entries stored in the browser (*
 **黄色词**
 
 - **对照表** / **大词典（本机增补）**：可单独或同时勾选；写入本浏览器  
-- 勾选**大词典**时须填写**中文释义**（请在释义里写上词性，如 `n. 苹果`；音标、英文释义、词形变化可选）  
+- 勾选**大词典**时须填写**中文释义**（建议写释义时带上词性，如 `n. 苹果`；音标、英文释义、词形变化可选）  
 
 
 
@@ -180,15 +182,16 @@ python app.py
 ## 使用流程 · Workflow
 
 1. **首页** `/`：选择对照表（含本机自建/已改）→ 粘贴文章和/或上传 `.docx` → 提交。  
-2. **确认页**：按绿/黄/红勾选（见上文）；黄词勾「大词典」须填中文释义（词性写在释义里）；写回本浏览器。  
+2. **确认页**：按绿/黄/红勾选（见上文）；黄词勾「大词典」须填中文释义（建议带词性）；写回本浏览器。  
 3. **结果页**：下载着色文档（若上传了 Word）与释义表；本机差分自动保存。  
 4. **设置** `/settings`：  
    - **着色颜色**：绿 / 黄 / 红各可开关（仅影响 Word 是否上色）与自定义 `#rrggbb`；确认页、结果页文案色同步  
+   - **释义表输出**：勾选音标 / 中文释义 / 英文释义 / 词形变化（默认音标+中文释义；词形还原提示固定）  
    - 编辑本机词典覆盖（完整 ECDICT 词条）/ 对照表差分  
    - 新建**空**对照表（本机）  
    - **上传 `.txt`** 创建对照表（服务器仅校验，可选派生词；结果存本机）  
    - 删除本机自建对照表（基准 `words.txt` 等不可删）  
-   - **导出 / 导入 / 清除**本机数据（含着色偏好）  
+   - **导出 / 导入 / 清除**本机数据（含着色与释义表输出偏好）  
 
 上传文档大小上限约 **16MB**；会话与下载缓存约 **1 小时**（释义表/着色文档会短暂缓存在服务器 `.cache/downloads/`，过期清理）。
 

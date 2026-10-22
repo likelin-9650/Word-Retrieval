@@ -33,6 +33,7 @@ from word_retrieval.user_data import (
     client_dict_overrides,
     dump_user_data,
     get_highlight,
+    get_vocab_output,
     is_custom_wordlist,
     parse_user_data,
     resolve_known_words,
@@ -272,10 +273,15 @@ def _finalize_session(
             sorted_vocab,
             Path(current_app.config["ECDICT_DB"]),
             client_entries=client_dict_entries_map(updated_user_data),
+            vocab_output=get_vocab_output(updated_user_data),
         )
-        pairs = [
-            (word, definitions.get(word, "") or "（词库未收录）") for word in sorted_vocab
-        ]
+        pairs: list[tuple[str, str]] = []
+        for word in sorted_vocab:
+            text = definitions.get(word)
+            if text is None:
+                pairs.append((word, "（词库未收录）"))
+            else:
+                pairs.append((word, text))
         missing = sum(1 for _, text in pairs if text == "（词库未收录）")
         if missing and sorted_vocab:
             translate_error = (
