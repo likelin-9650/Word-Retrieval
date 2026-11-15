@@ -50,3 +50,49 @@
 #
 # 六、触发：push 任意分支（含 main / feature/* 等），或 Actions 页手动 Run workflow
 #     注意：任意分支都会覆盖服务器上同一份部署目录，推实验分支也会上线。
+#
+# 七、HTTPS（Nginx + Let's Encrypt；在服务器上手动做一次，勿写进每次 Actions）
+#
+#   前置：域名 A 记录已指向本机；安全组已放行 TCP 80 与 443；gunicorn 仍只听 127.0.0.1:5000。
+#   不要对公网开放 5000。
+#
+#   1. 安全组入方向增加：TCP 443/443，0.0.0.0/0。
+#
+#   2. 安装 certbot（Ubuntu 22.04 示例）：
+#        sudo apt update
+#        sudo apt install -y certbot python3-certbot-nginx
+#
+#   3. 先保证 HTTP 反代可用（示例 /etc/nginx/sites-available/wordsorting）：
+#
+#        server {
+#            listen 80;
+#            server_name wordsorting.com;
+#
+#            client_max_body_size 16m;
+#
+#            location / {
+#                proxy_pass http://127.0.0.1:5000;
+#                proxy_set_header Host $host;
+#                proxy_set_header X-Real-IP $remote_addr;
+#                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#                proxy_set_header X-Forwarded-Proto $scheme;
+#            }
+#        }
+#
+#      sudo ln -sf /etc/nginx/sites-available/wordsorting /etc/nginx/sites-enabled/
+#      sudo nginx -t && sudo systemctl reload nginx
+#
+#   4. 申请证书并让 certbot 改写 Nginx（仅裸域；若有 www 解析再加 -d www.wordsorting.com）：
+#        sudo certbot --nginx -d wordsorting.com
+#
+#      成功后应出现 listen 443 ssl，且 80 端口 HTTP→HTTPS 重定向（certbot 通常自动加）。
+#      若需手写 80 跳转：
+#        return 301 https://$host$request_uri;
+#
+#   5. 验收：
+#        curl -I http://wordsorting.com          # 期望 301 → https
+#        curl -I https://wordsorting.com         # 期望 200
+#        curl -I http://127.0.0.1:5000           # 本机仍通；公网勿放行 5000
+#
+#   证书续期：certbot 定时任务一般已装好；可测：sudo certbot renew --dry-run
+#

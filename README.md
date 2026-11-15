@@ -40,8 +40,8 @@ A local Flask web app that extracts English words from `.docx` or pasted text, c
 公安备案图标：`word_retrieval/static/beian-mps.png`。  
 动态页脚由 `word_retrieval/pages/__init__.py` 生成；首页 `index.html` 为静态页脚，**改号或改页脚链接时两处同步**。
 
-**隐私说明** `/privacy`：说明本站使用浏览器 localStorage 保存对照表差分、词典覆盖、着色偏好等；提交时仅当次用于分类与生成下载；当次会话与下载文件落在服务器 `.cache/`（磁盘，多 worker 可共享），约 **30 分钟**惰性清理；**每个下载链接仅一次有效**；换浏览器或清除站点数据会丢失本机改动（可用设置页导出备份）。页脚「隐私说明」入口指向该页。  
-Privacy note at `/privacy` (footer link): localStorage contents; per-job files under server `.cache/` (~30 min lazy TTL, shared across workers); **one-time download links**; backup via Settings export.
+**隐私说明** `/privacy`：说明本站使用浏览器 localStorage 保存对照表差分、词典覆盖、着色偏好等；生产环境以 **HTTPS** 传输；提交时仅当次用于分类与生成下载；当次会话与下载文件落在服务器 `.cache/`（磁盘，多 worker 可共享），约 **30 分钟**惰性清理；**每个下载链接仅一次有效**；换浏览器或清除站点数据会丢失本机改动（可用设置页导出备份）。页脚「隐私说明」入口指向该页。  
+Privacy note at `/privacy` (footer link): localStorage; **HTTPS** in production; per-job files under server `.cache/` (~30 min lazy TTL, shared across workers); **one-time download links**; backup via Settings export.
 
 ---
 
@@ -274,6 +274,7 @@ Word-Retrieval/
 | 本机改动消失 | 是否清过站点数据/换了浏览器；用设置页「导出」备份 |
 | 设置页按钮无反应 | 硬刷新（Ctrl+F5）；确认 `/static/user_data.js` 可访问；勿对 script 内 JSON 使用 html.escape |
 | 推了代码但网站未更新 | 看 Actions 是否跑通；任意分支 push 都会部署，失败时看 workflow 日志 |
+| 网站应走 HTTPS | 外网用 `https://wordsorting.com`；HTTP 应 301 跳转。证书/Nginx 步骤见 `.github/DEPLOY.md` 第七节；安全组需放行 443 |
 | 无法读取文档 | 使用 `.docx`，非旧版 `.doc` |
 | PowerShell 无法 `Activate.ps1` | 直接用 `.\.venv\Scripts\python.exe app.py` |
 | GitHub 推送因大文件失败 | 勿提交 `.venv` |

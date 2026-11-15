@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 import uuid
@@ -55,6 +56,17 @@ from word_retrieval.user_data import (
 from word_retrieval.vocab_doc import build_vocabulary_docx
 
 bp = Blueprint("main", __name__)
+logger = logging.getLogger(__name__)
+
+_ECDICT_PUBLIC_ERROR = "服务器缺少大词典，请联系管理员。"
+
+
+def _safe_public_message(exc: BaseException, *, fallback: str) -> str:
+    """业务 ValueError（含 CacheLimitError）可对外；其余只写日志并返回短文案。"""
+    if isinstance(exc, ValueError):
+        return str(exc)
+    logger.exception("%s", fallback)
+    return fallback
 
 
 def _session_dir() -> Path:
@@ -148,13 +160,19 @@ def _begin_review(
 
             resolve_wordlist_path(_wordlists_dir(), wordlist_name)
         known = resolve_known_words(user_data, wordlist_name, _wordlists_dir())
-    except Exception as exc:  # noqa: BLE001
+    except ValueError as exc:
         return render_message_page("对照表错误", str(exc), status=400)
+    except Exception as exc:  # noqa: BLE001
+        msg = _safe_public_message(
+            exc, fallback="对照表不可用，请检查名称或本机数据后重试。"
+        )
+        return render_message_page("对照表错误", msg, status=400)
 
     try:
         dictionary = _classification_dictionary(user_data)
     except EcdictError as exc:
-        return render_message_page("缺少大词典", str(exc), status=500)
+        logger.exception("ECDICT 不可用: %s", exc)
+        return render_message_page("缺少大词典", _ECDICT_PUBLIC_ERROR, status=500)
 
     words = extract_english_words(text)
     from word_retrieval.lexicon import classify_words
@@ -276,7 +294,10 @@ def _finalize_session(
                 highlight=get_highlight(updated_user_data),
             )
         except Exception as exc:  # noqa: BLE001
-            return render_message_page("处理失败", f"文档着色出错：{exc}", status=500)
+            msg = _safe_public_message(
+                exc, fallback="文档着色失败，请稍后重试或换一份文档。"
+            )
+            return render_message_page("处理失败", msg, status=500)
         highlight_name = f"{stem}_highlighted.docx"
         try:
             highlight_token = _store_download(highlighted, highlight_name)
@@ -313,14 +334,17 @@ def _finalize_session(
     except CacheLimitError as exc:
         return render_message_page("暂时无法处理", str(exc), status=503)
     except EcdictError as exc:
-        translate_error = str(exc)
+        logger.exception("查词 ECDICT 不可用: %s", exc)
+        translate_error = _ECDICT_PUBLIC_ERROR
         pairs = [(word, "") for word in sorted(vocab_words)]
         try:
             vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
         except CacheLimitError as limit_exc:
             return render_message_page("暂时无法处理", str(limit_exc), status=503)
     except Exception as exc:  # noqa: BLE001
-        translate_error = f"查词过程出错：{exc}"
+        translate_error = _safe_public_message(
+            exc, fallback="查词过程出错，释义表可能不完整，请稍后重试。"
+        )
         pairs = [(word, "") for word in sorted(vocab_words)]
         try:
             vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
@@ -451,8 +475,13 @@ def api_parse_wordlist():
                 "with_inflections": False,
             }
         )
-    except Exception as exc:  # noqa: BLE001
+    except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:  # noqa: BLE001
+        msg = _safe_public_message(
+            exc, fallback="解析失败，请检查文件格式后重试。"
+        )
+        return jsonify({"ok": False, "error": msg}), 400
 
 
 @bp.post("/upload")
@@ -485,7 +514,10 @@ def upload():
                 "文件不是有效的 .docx（也可能是旧版 .doc）。请用 Word/WPS 另存为 .docx 后再试。",
             )
         except Exception as exc:  # noqa: BLE001
-            return render_message_page("处理失败", f"服务器处理出错：{exc}", status=500)
+            msg = _safe_public_message(
+                exc, fallback="服务器处理文档失败，请稍后重试。"
+            )
+            return render_message_page("处理失败", msg, status=500)
 
         combined = f"{doc_text}\n{article}" if article else doc_text
         source = filename if not article else f"{filename} + 文本输入"
