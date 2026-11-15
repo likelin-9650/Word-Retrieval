@@ -16,6 +16,20 @@ from word_retrieval.ecdict import EcdictError, load_ecdict_headwords, lookup_def
 from word_retrieval.extractor import extract_english_words, read_docx_text
 from word_retrieval.highlighter import build_highlighted_docx
 from word_retrieval.inflections import expand_wordlist_forms
+from word_retrieval.job_cache import (
+    TOKEN_RE,
+    CacheLimitError,
+    cleanup_expired,
+    delete_download,
+    delete_session_files,
+    ensure_cache_capacity,
+    get_download,
+    pop_session,
+    put_session,
+    read_session_source_bytes,
+    save_session,
+    store_download,
+)
 from word_retrieval.lexicon import (
     decode_upload_text,
     ensure_wordlists_dir,
@@ -42,37 +56,25 @@ from word_retrieval.vocab_doc import build_vocabulary_docx
 
 bp = Blueprint("main", __name__)
 
-_DOWNLOADS: dict[str, dict] = {}
-_SESSIONS: dict[str, dict] = {}
-_TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
-_MAX_CACHE_AGE_SEC = 3600
+
+def _session_dir() -> Path:
+    return Path(current_app.config["SESSION_DIR"])
 
 
-def _cleanup_downloads() -> None:
-    now = time.time()
-    expired = [
-        token
-        for token, meta in _DOWNLOADS.items()
-        if now - meta["created_at"] > _MAX_CACHE_AGE_SEC
-    ]
-    for token in expired:
-        meta = _DOWNLOADS.pop(token, None)
-        if meta is None:
-            continue
-        path = Path(meta["path"])
-        if path.exists():
-            path.unlink(missing_ok=True)
+def _download_dir() -> Path:
+    return Path(current_app.config["DOWNLOAD_DIR"])
 
 
-def _cleanup_sessions() -> None:
-    now = time.time()
-    expired = [
-        sid
-        for sid, meta in _SESSIONS.items()
-        if now - meta["created_at"] > _MAX_CACHE_AGE_SEC
-    ]
-    for sid in expired:
-        _SESSIONS.pop(sid, None)
+def _cache_max_age() -> float:
+    return float(current_app.config["CACHE_MAX_AGE_SEC"])
+
+
+def _cleanup_job_cache() -> None:
+    cleanup_expired(
+        _session_dir(),
+        _download_dir(),
+        max_age_sec=_cache_max_age(),
+    )
 
 
 def _safe_stem(filename: str) -> str:
@@ -82,18 +84,14 @@ def _safe_stem(filename: str) -> str:
 
 
 def _store_download(content: bytes, download_name: str) -> str:
-    _cleanup_downloads()
-    cache_dir = Path(current_app.config["DOWNLOAD_DIR"])
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    token = uuid.uuid4().hex
-    output_path = cache_dir / f"{token}.docx"
-    output_path.write_bytes(content)
-    _DOWNLOADS[token] = {
-        "path": str(output_path),
-        "download_name": download_name,
-        "created_at": time.time(),
-    }
-    return token
+    ensure_cache_capacity(
+        _session_dir(),
+        _download_dir(),
+        max_age_sec=_cache_max_age(),
+        max_bytes=int(current_app.config["CACHE_MAX_BYTES"]),
+        extra_bytes=len(content) + 256,
+    )
+    return store_download(_download_dir(), content, download_name)
 
 
 def _wordlists_dir() -> Path:
@@ -169,20 +167,38 @@ def _begin_review(
     print(f"总计 {len(words)} | 绿 {len(green)} | 黄 {len(yellow)} | 红 {len(red)}")
     print("=" * 40)
 
-    _cleanup_sessions()
+    try:
+        ensure_cache_capacity(
+            _session_dir(),
+            _download_dir(),
+            max_age_sec=_cache_max_age(),
+            max_sessions=int(current_app.config["CACHE_MAX_SESSIONS"]),
+            max_bytes=int(current_app.config["CACHE_MAX_BYTES"]),
+            extra_bytes=len(highlight_bytes or b"") + 4096,
+            require_session_slot=True,
+        )
+    except CacheLimitError as exc:
+        return render_message_page("暂时无法处理", str(exc), status=503)
+
     session_id = uuid.uuid4().hex
-    _SESSIONS[session_id] = {
+    session = {
         "created_at": time.time(),
         "source_label": source_label,
         "stem": stem,
-        "highlight_bytes": highlight_bytes,
         "wordlist_name": wordlist_name,
         "user_data": user_data,
         "baseline_names": baseline,
         "green": green,
         "yellow": yellow,
         "red": red,
+        "source_path": None,
     }
+    save_session(
+        _session_dir(),
+        session_id,
+        session,
+        source_bytes=highlight_bytes,
+    )
     return render_confirm_page(
         session_id=session_id,
         source_label=source_label,
@@ -231,7 +247,7 @@ def _finalize_session(
     except ValueError as exc:
         if session_id:
             session["created_at"] = time.time()
-            _SESSIONS[session_id] = session
+            put_session(_session_dir(), session_id, session)
         return render_message_page("确认失败", str(exc), status=400)
 
     # 文档着色：剔出对照表的绿词按未掌握（红）显示
@@ -247,7 +263,9 @@ def _finalize_session(
 
     highlight_token = None
     highlight_name = None
-    highlight_bytes = session.get("highlight_bytes")
+    highlight_bytes = read_session_source_bytes(session)
+    if session_id:
+        delete_session_files(_session_dir(), session_id)
     if highlight_bytes is not None:
         try:
             highlighted = build_highlighted_docx(
@@ -260,7 +278,10 @@ def _finalize_session(
         except Exception as exc:  # noqa: BLE001
             return render_message_page("处理失败", f"文档着色出错：{exc}", status=500)
         highlight_name = f"{stem}_highlighted.docx"
-        highlight_token = _store_download(highlighted, highlight_name)
+        try:
+            highlight_token = _store_download(highlighted, highlight_name)
+        except CacheLimitError as exc:
+            return render_message_page("暂时无法处理", str(exc), status=503)
 
     vocab_words = keep_red | green_to_vocab
 
@@ -289,14 +310,22 @@ def _finalize_session(
                 "已在释义表中标注「词库未收录」。"
             )
         vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
+    except CacheLimitError as exc:
+        return render_message_page("暂时无法处理", str(exc), status=503)
     except EcdictError as exc:
         translate_error = str(exc)
         pairs = [(word, "") for word in sorted(vocab_words)]
-        vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
+        try:
+            vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
+        except CacheLimitError as limit_exc:
+            return render_message_page("暂时无法处理", str(limit_exc), status=503)
     except Exception as exc:  # noqa: BLE001
         translate_error = f"查词过程出错：{exc}"
         pairs = [(word, "") for word in sorted(vocab_words)]
-        vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
+        try:
+            vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
+        except CacheLimitError as limit_exc:
+            return render_message_page("暂时无法处理", str(limit_exc), status=503)
 
     known = resolve_known_words(updated_user_data, wordlist_name, _wordlists_dir())
     try:
@@ -481,12 +510,12 @@ def upload():
 
 @bp.post("/confirm")
 def confirm():
-    _cleanup_sessions()
+    _cleanup_job_cache()
     session_id = (request.form.get("session_id") or "").strip()
-    if not _TOKEN_RE.fullmatch(session_id):
+    if not TOKEN_RE.fullmatch(session_id):
         return render_message_page("会话无效", "请重新提交文章或文档。", status=400)
 
-    session = _SESSIONS.pop(session_id, None)
+    session = pop_session(_session_dir(), session_id)
     if session is None:
         return render_message_page(
             "会话已过期",
@@ -547,30 +576,45 @@ def confirm():
 
 @bp.get("/download/<token>")
 def download_file(token: str):
-    if not _TOKEN_RE.fullmatch(token):
+    from io import BytesIO
+
+    if not TOKEN_RE.fullmatch(token):
         return render_message_page("无效链接", "下载链接无效。", status=404)
 
-    _cleanup_downloads()
-    meta = _DOWNLOADS.get(token)
+    _cleanup_job_cache()
+    meta = get_download(_download_dir(), token)
     if meta is None:
         return render_message_page(
             "文件已过期",
-            "文档缓存已失效，请重新提交生成。",
+            "文档缓存已失效或已下载过（链接仅一次有效），请重新提交生成。",
             status=404,
         )
 
     path = Path(meta["path"])
     if not path.exists():
-        _DOWNLOADS.pop(token, None)
+        delete_download(_download_dir(), token)
         return render_message_page(
             "文件已过期",
             "文档不存在，请重新提交生成。",
             status=404,
         )
 
+    # 先读入内存再删文件，避免 Windows 下发送中占用句柄；首次下载后删除
+    try:
+        payload = path.read_bytes()
+    except OSError:
+        delete_download(_download_dir(), token)
+        return render_message_page(
+            "文件已过期",
+            "文档读取失败，请重新提交生成。",
+            status=404,
+        )
+    download_name = meta["download_name"]
+    delete_download(_download_dir(), token)
+
     return send_file(
-        path,
+        BytesIO(payload),
         as_attachment=True,
-        download_name=meta["download_name"],
+        download_name=download_name,
         mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )

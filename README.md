@@ -40,8 +40,8 @@ A local Flask web app that extracts English words from `.docx` or pasted text, c
 公安备案图标：`word_retrieval/static/beian-mps.png`。  
 动态页脚由 `word_retrieval/pages/__init__.py` 生成；首页 `index.html` 为静态页脚，**改号或改页脚链接时两处同步**。
 
-**隐私说明** `/privacy`：说明本站使用浏览器 localStorage 保存对照表差分、词典覆盖、着色偏好等；提交时仅当次用于分类与生成下载；下载文件在服务器临时缓存约 1 小时；换浏览器或清除站点数据会丢失本机改动（可用设置页导出备份）。页脚「隐私说明」入口指向该页。  
-Privacy note at `/privacy` (footer link): localStorage contents, one-time server use on submit, ~1h download cache, backup via Settings export.
+**隐私说明** `/privacy`：说明本站使用浏览器 localStorage 保存对照表差分、词典覆盖、着色偏好等；提交时仅当次用于分类与生成下载；当次会话与下载文件落在服务器 `.cache/`（磁盘，多 worker 可共享），约 **30 分钟**惰性清理；**每个下载链接仅一次有效**；换浏览器或清除站点数据会丢失本机改动（可用设置页导出备份）。页脚「隐私说明」入口指向该页。  
+Privacy note at `/privacy` (footer link): localStorage contents; per-job files under server `.cache/` (~30 min lazy TTL, shared across workers); **one-time download links**; backup via Settings export.
 
 ---
 
@@ -193,7 +193,8 @@ python app.py
    - 删除本机自建对照表（基准 `words.txt` 等不可删）  
    - **导出 / 导入 / 清除**本机数据（含着色与释义表输出偏好）  
 
-上传文档大小上限约 **16MB**；会话与下载缓存约 **1 小时**（释义表/着色文档会短暂缓存在服务器 `.cache/downloads/`，过期清理）。
+上传文档大小上限约 **16MB**。当次会话（含上传原文）与生成的释义表/着色文档缓存在服务器 `.cache/sessions/`、`.cache/downloads/`（磁盘，gunicorn 多 worker 可共享）：约 **30 分钟**惰性清理；同时会话约 **50**、缓存合计约 **500MB** 上限（超限友好拒绝）；**每个下载链接仅可使用一次**（首次下载后删除）。  
+Upload cap ~**16MB**. Per-job cache under `.cache/sessions/` and `.cache/downloads/` (shared across workers): ~**30 min** lazy TTL; ~**50** concurrent sessions and ~**500MB** total cache cap; **one-time download links**.
 
 ### 上传对照表格式 · Wordlist `.txt` format
 
@@ -227,6 +228,7 @@ Word-Retrieval/
 └── word_retrieval/             # Flask 应用包
     ├── __init__.py             # create_app()
     ├── routes.py               # 路由与主流程
+    ├── job_cache.py            # 当次会话/下载磁盘缓存（跨 worker）
     ├── user_data.py            # 浏览器差分：解析 / 与基准合并
     ├── extractor.py            # 提取单词
     ├── lexicon.py              # 对照表 / 分类 / 上传校验
@@ -240,7 +242,7 @@ Word-Retrieval/
     └── pages/                  # 确认 / 结果 / 设置 / 隐私说明等（页脚含 ICP + 公安备案 + 隐私入口）
 ```
 
-生产部署：push 到 GitHub **任意分支**（含 `main` / `feature/*` 等）都会触发 Actions 自动部署到同一台服务器；也可在 Actions 页手动 Run workflow。注意实验分支也会覆盖线上。
+生产部署：push 到 GitHub **任意分支**（含 `main` / `feature/*` 等）都会触发 Actions 自动部署到同一台服务器；也可在 Actions 页手动 Run workflow。注意实验分支也会覆盖线上。gunicorn 可用多 worker（示例 `-w 2`，见 `.github/DEPLOY.md`）；当次会话在磁盘 `.cache/` 共享。
 
 ---
 

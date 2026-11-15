@@ -65,7 +65,8 @@ def render_result_page(
 
     actions_html = "\n      ".join(actions) if actions else ""
     hint = (
-        '<span class="hint">点击后浏览器会询问保存位置（另存为）</span>'
+        '<span class="hint">每个下载链接仅可使用一次，请尽快保存'
+        "（约 30 分钟内有效；点击后浏览器会询问保存位置）</span>"
         if actions
         else ""
     )

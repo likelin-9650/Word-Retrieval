@@ -23,6 +23,10 @@ def create_app() -> Flask:
     # 旧 scowl 文件保留兼容；黄/红分类已改为 ECDICT
     app.config["SCOWL_WORDS"] = PROJECT_ROOT / "scowl_words.txt"
     app.config["DOWNLOAD_DIR"] = PROJECT_ROOT / ".cache" / "downloads"
+    app.config["SESSION_DIR"] = PROJECT_ROOT / ".cache" / "sessions"
+    app.config["CACHE_MAX_AGE_SEC"] = 1800  # 30 分钟
+    app.config["CACHE_MAX_SESSIONS"] = 50
+    app.config["CACHE_MAX_BYTES"] = 500 * 1024 * 1024  # 500 MB
     app.config["ECDICT_DB"] = PROJECT_ROOT / "dictionaries" / "ecdict.db"
     # 服务器仍可保留空覆盖文件；网页用户改动写入浏览器，不再写这些共享文件
     app.config["DICT_EXTRA"] = PROJECT_ROOT / "dictionaries" / "dict_extra.txt"
@@ -38,6 +42,15 @@ def create_app() -> Flask:
         legacy_words=app.config["LEGACY_WORDS_TXT"],
     )
     ensure_dict_override_files(app.config["DICT_EXTRA"], app.config["DICT_EXCLUDE"])
+
+    from word_retrieval.job_cache import cleanup_expired, ensure_cache_dirs
+
+    ensure_cache_dirs(app.config["SESSION_DIR"], app.config["DOWNLOAD_DIR"])
+    cleanup_expired(
+        app.config["SESSION_DIR"],
+        app.config["DOWNLOAD_DIR"],
+        max_age_sec=app.config["CACHE_MAX_AGE_SEC"],
+    )
 
     from word_retrieval.routes import bp
 

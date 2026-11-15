@@ -25,3 +25,6 @@ test/
 HANDOFF.md
 SECURITY_STABILITY.md
 .cursor/
+
+# 无关本地工程：与 Word Retrieval 无关，禁止提交；agent 亦应完全忽略
+dsh-fix/

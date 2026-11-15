@@ -31,7 +31,15 @@
 #
 #      ubuntu ALL=(ALL) NOPASSWD: /bin/systemctl restart word-retrieval, /bin/systemctl status word-retrieval, /bin/systemctl is-active word-retrieval
 #
-#   4. 已创建 word-retrieval.service
+#   4. 已创建 word-retrieval.service。会话/下载在磁盘 `.cache/`，可用多 worker。
+#      ExecStart 示例（按实际 User、WorkingDirectory、venv 路径改）：
+#
+#      [Service]
+#      User=deploy
+#      WorkingDirectory=/home/deploy/Word-Retrieval
+#      ExecStart=/home/deploy/Word-Retrieval/.venv/bin/gunicorn \
+#        -w 2 -b 127.0.0.1:5000 'word_retrieval:create_app()'
+#      Restart=on-failure
 #
 # 五、关于 ecdict.db（服务器若也无法访问 GitHub）：
 #
