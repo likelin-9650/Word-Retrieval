@@ -27,6 +27,15 @@ def create_app() -> Flask:
     app.config["CACHE_MAX_AGE_SEC"] = 1800  # 30 分钟
     app.config["CACHE_MAX_SESSIONS"] = 50
     app.config["CACHE_MAX_BYTES"] = 500 * 1024 * 1024  # 500 MB
+    # 资源上限（SECURITY 1.3）
+    app.config["MAX_ARTICLE_CHARS"] = 200_000
+    app.config["MAX_SOURCE_TEXT_CHARS"] = 500_000
+    app.config["MAX_EXTRACTED_WORDS"] = 5_000
+    app.config["MAX_DOCX_ENTRIES"] = 2_000
+    app.config["MAX_DOCX_UNCOMPRESSED"] = 64 * 1024 * 1024  # 64 MB
+    app.config["MAX_DOCX_RATIO"] = 100
+    app.config["MAX_ALGO_EXPAND_WORDS"] = 20_000
+    app.config["MAX_EXPAND_SEC"] = 20
     app.config["ECDICT_DB"] = PROJECT_ROOT / "dictionaries" / "ecdict.db"
     # 服务器仍可保留空覆盖文件；网页用户改动写入浏览器，不再写这些共享文件
     app.config["DICT_EXTRA"] = PROJECT_ROOT / "dictionaries" / "dict_extra.txt"

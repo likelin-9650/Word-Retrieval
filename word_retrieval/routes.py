@@ -144,6 +144,23 @@ def _begin_review(
     highlight_bytes: bytes | None = None,
     stem: str = "article",
 ):
+    max_source = int(current_app.config["MAX_SOURCE_TEXT_CHARS"])
+    if len(text) > max_source:
+        return render_message_page(
+            "文本过长",
+            f"合并后的文本不得超过 {max_source} 个字符，请缩短后重试。",
+            status=400,
+        )
+
+    words = extract_english_words(text)
+    max_words = int(current_app.config["MAX_EXTRACTED_WORDS"])
+    if len(words) > max_words:
+        return render_message_page(
+            "词数过多",
+            f"提取到的不重复单词为 {len(words)} 个，超过上限 {max_words}，请缩短文章后重试。",
+            status=400,
+        )
+
     dict_path = Path(current_app.config["ECDICT_DB"])
     if not dict_path.exists():
         return render_message_page(
@@ -174,7 +191,6 @@ def _begin_review(
         logger.exception("ECDICT 不可用: %s", exc)
         return render_message_page("缺少大词典", _ECDICT_PUBLIC_ERROR, status=500)
 
-    words = extract_english_words(text)
     from word_retrieval.lexicon import classify_words
 
     green, yellow, red = classify_words(words, known=known, dictionary=dictionary)
@@ -402,6 +418,12 @@ def privacy():
     return render_privacy_page()
 
 
+@bp.get("/healthz")
+def healthz():
+    """轻量存活检查：不加载 ECDICT、不扫缓存。"""
+    return jsonify({"ok": True})
+
+
 @bp.post("/api/parse_wordlist")
 def api_parse_wordlist():
     """
@@ -436,12 +458,24 @@ def api_parse_wordlist():
         if algo_mode not in {"none", "all", "pick"}:
             algo_mode = "none"
 
+        if algo_mode in {"all", "pick"}:
+            max_algo = int(current_app.config["MAX_ALGO_EXPAND_WORDS"])
+            if base_count > max_algo:
+                raise ValueError(
+                    f"启用算法扩充时，基础词数不得超过 {max_algo}，"
+                    f"当前为 {base_count}。请关闭算法或减少词数。"
+                )
+
         if use_ecdict or algo_mode != "none":
+            deadline = time.monotonic() + float(
+                current_app.config["MAX_EXPAND_SEC"]
+            )
             result = expand_wordlist_forms(
                 words,
                 ecdict_db=Path(current_app.config["ECDICT_DB"]),
                 use_ecdict_exchange=use_ecdict,
                 algo_mode=algo_mode,
+                deadline=deadline,
             )
             return jsonify(
                 {
@@ -498,6 +532,14 @@ def upload():
             "请上传 Word 文档，或在文本框中输入文章后再提交。",
         )
 
+    max_article = int(current_app.config["MAX_ARTICLE_CHARS"])
+    if len(article) > max_article:
+        return render_message_page(
+            "文本过长",
+            f"粘贴文本不得超过 {max_article} 个字符，当前为 {len(article)}。",
+            status=400,
+        )
+
     if has_file:
         filename = Path(uploaded.filename).name
         if not filename.lower().endswith(".docx"):
@@ -507,12 +549,19 @@ def upload():
             )
         file_bytes = uploaded.read()
         try:
-            doc_text = read_docx_text(file_bytes)
-        except (BadZipFile, PackageNotFoundError, ValueError):
+            doc_text = read_docx_text(
+                file_bytes,
+                max_entries=int(current_app.config["MAX_DOCX_ENTRIES"]),
+                max_uncompressed=int(current_app.config["MAX_DOCX_UNCOMPRESSED"]),
+                max_ratio=float(current_app.config["MAX_DOCX_RATIO"]),
+            )
+        except (BadZipFile, PackageNotFoundError):
             return render_message_page(
                 "无法读取文档",
                 "文件不是有效的 .docx（也可能是旧版 .doc）。请用 Word/WPS 另存为 .docx 后再试。",
             )
+        except ValueError as exc:
+            return render_message_page("无法处理文档", str(exc), status=400)
         except Exception as exc:  # noqa: BLE001
             msg = _safe_public_message(
                 exc, fallback="服务器处理文档失败，请稍后重试。"

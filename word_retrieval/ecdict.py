@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -263,10 +264,16 @@ def load_ecdict_headwords(db_path: str) -> frozenset[str]:
     )
 
 
-def load_exchange_map(db_path: Path, words: list[str] | set[str]) -> dict[str, str]:
+def load_exchange_map(
+    db_path: Path,
+    words: list[str] | set[str],
+    *,
+    deadline: float | None = None,
+) -> dict[str, str]:
     """
     批量读取词头对应的 exchange 字段。
     返回 {小写词头: exchange 原文}；未命中不出现在结果中。
+    deadline：time.monotonic() 截止时刻；超时抛 ValueError。
     """
     path = Path(db_path)
     if not path.exists():
@@ -287,6 +294,8 @@ def load_exchange_map(db_path: Path, words: list[str] | set[str]) -> dict[str, s
     try:
         chunk = 500
         for i in range(0, len(keys), chunk):
+            if deadline is not None and time.monotonic() > deadline:
+                raise ValueError("派生词扩展超时，请减少词数或关闭算法扩充后重试。")
             part = keys[i : i + chunk]
             placeholders = ",".join("?" * len(part))
             rows = conn.execute(

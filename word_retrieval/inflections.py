@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,11 @@ def _is_simple_token(token: str) -> bool:
         return False
     # 允许字母与内部撇号，如 don't / it's（屈折结果一般不含）
     return all(ch.isalpha() or ch == "'" for ch in t)
+
+
+def _check_deadline(deadline: float | None) -> None:
+    if deadline is not None and time.monotonic() > deadline:
+        raise ValueError("派生词扩展超时，请减少词数或关闭算法扩充后重试。")
 
 
 def parse_exchange_forms(exchange: str) -> set[str]:
@@ -62,10 +68,15 @@ def inflections_for_word(word: str) -> set[str]:
     return out
 
 
-def expand_with_inflections(words: set[str] | list[str]) -> set[str]:
+def expand_with_inflections(
+    words: set[str] | list[str],
+    *,
+    deadline: float | None = None,
+) -> set[str]:
     """对词表中每个词扩展 lemminflect 屈折派生词，返回去重后的小写集合。"""
     expanded: set[str] = set()
     for word in words:
+        _check_deadline(deadline)
         expanded |= inflections_for_word(str(word))
     return expanded
 
@@ -76,6 +87,7 @@ def expand_wordlist_forms(
     ecdict_db: Path | None = None,
     use_ecdict_exchange: bool = True,
     algo_mode: str = "none",
+    deadline: float | None = None,
 ) -> dict[str, Any]:
     """
     扩展对照表派生词。
@@ -86,6 +98,7 @@ def expand_wordlist_forms(
         all  — 算法结果全部采信
         pick — ECDICT 词头中已有的算法结果直接采信；
                其余（算法有、ECDICT 无）放入 algo_candidates 供用户勾选
+    - deadline：time.monotonic() 截止时刻；超时抛 ValueError
 
     返回 dict：
       accepted, algo_candidates, base_count,
@@ -107,16 +120,19 @@ def expand_wordlist_forms(
 
         db_path = Path(ecdict_db)
         if use_ecdict_exchange:
-            exchange_map = load_exchange_map(db_path, base)
+            _check_deadline(deadline)
+            exchange_map = load_exchange_map(db_path, base, deadline=deadline)
             before = len(accepted)
             for _word, exchange in exchange_map.items():
+                _check_deadline(deadline)
                 accepted |= parse_exchange_forms(exchange)
             ecdict_added = len(accepted) - before
         if mode == "pick":
+            _check_deadline(deadline)
             headwords = load_ecdict_headwords(str(db_path))
 
     if mode in {"all", "pick"}:
-        algo = expand_with_inflections(base)
+        algo = expand_with_inflections(base, deadline=deadline)
         if mode == "all":
             before = len(accepted)
             accepted |= algo

@@ -64,13 +64,36 @@
 #
 #   3. 先保证 HTTP 反代可用（示例 /etc/nginx/sites-available/wordsorting）：
 #
+#        # 限流区：放在 http {} 块（如 nginx.conf）或本文件外层；按 IP
+#        # limit_req_zone $binary_remote_addr zone=wr_general:10m rate=10r/s;
+#        # limit_req_zone $binary_remote_addr zone=wr_heavy:10m rate=2r/s;
+#
 #        server {
 #            listen 80;
 #            server_name wordsorting.com;
 #
 #            client_max_body_size 16m;
 #
+#            location = /upload {
+#                limit_req zone=wr_heavy burst=5 nodelay;
+#                proxy_pass http://127.0.0.1:5000;
+#                proxy_set_header Host $host;
+#                proxy_set_header X-Real-IP $remote_addr;
+#                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#                proxy_set_header X-Forwarded-Proto $scheme;
+#            }
+#
+#            location = /api/parse_wordlist {
+#                limit_req zone=wr_heavy burst=5 nodelay;
+#                proxy_pass http://127.0.0.1:5000;
+#                proxy_set_header Host $host;
+#                proxy_set_header X-Real-IP $remote_addr;
+#                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+#                proxy_set_header X-Forwarded-Proto $scheme;
+#            }
+#
 #            location / {
+#                limit_req zone=wr_general burst=20 nodelay;
 #                proxy_pass http://127.0.0.1:5000;
 #                proxy_set_header Host $host;
 #                proxy_set_header X-Real-IP $remote_addr;
@@ -78,6 +101,9 @@
 #                proxy_set_header X-Forwarded-Proto $scheme;
 #            }
 #        }
+#
+#      限流为可选加固：须在服务器上手动写入、sudo nginx -t && sudo systemctl reload nginx。
+#      Actions 部署不会改 Nginx。健康检查可用：curl -s http://127.0.0.1:5000/healthz
 #
 #      sudo ln -sf /etc/nginx/sites-available/wordsorting /etc/nginx/sites-enabled/
 #      sudo nginx -t && sudo systemctl reload nginx
