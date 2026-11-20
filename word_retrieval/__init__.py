@@ -82,6 +82,8 @@ def create_app() -> Flask:
     )
 
     from word_retrieval.routes import bp
+    from word_retrieval.security_headers import register_security_headers
 
     app.register_blueprint(bp)
+    register_security_headers(app)
     return app
