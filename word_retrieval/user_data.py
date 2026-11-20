@@ -16,6 +16,20 @@ from word_retrieval.lexicon import (
 
 USER_DATA_VERSION = 3
 
+# 本机 user_data 体量上限（SECURITY 2.2）；超限拒绝，不截断。
+MAX_USER_DATA_BYTES = 1 * 1024 * 1024  # 1 MiB
+MAX_CUSTOM_LISTS = 50
+MAX_PATCHES = 50
+MAX_WORDS_PER_LIST = 50_000
+MAX_DICT_EXTRA = 10_000
+MAX_DICT_EXCLUDE = 10_000
+MAX_ENTRY_WORD = 64
+MAX_ENTRY_PHONETIC = 128
+MAX_ENTRY_POS = 128
+MAX_ENTRY_DEFINITION = 2000
+MAX_ENTRY_TRANSLATION = 2000
+MAX_ENTRY_EXCHANGE = 512
+
 # 与 ECDICT 词条字段对齐；新增时仅 translation（中文释义）必填，
 # 建议把词性写在中文释义里（如「n. 苹果」）；pos 字段保留兼容，可为空。
 DICT_ENTRY_FIELDS = (
@@ -26,6 +40,14 @@ DICT_ENTRY_FIELDS = (
     "pos",
     "exchange",
 )
+_ENTRY_MAX_LEN = {
+    "word": MAX_ENTRY_WORD,
+    "phonetic": MAX_ENTRY_PHONETIC,
+    "definition": MAX_ENTRY_DEFINITION,
+    "translation": MAX_ENTRY_TRANSLATION,
+    "pos": MAX_ENTRY_POS,
+    "exchange": MAX_ENTRY_EXCHANGE,
+}
 
 VOCAB_OUTPUT_KEYS = ("phonetic", "translation", "definition", "exchange")
 DEFAULT_VOCAB_OUTPUT: dict[str, bool] = {
@@ -123,6 +145,17 @@ def empty_dict_entry(word: str = "") -> dict[str, str]:
     }
 
 
+def _assert_entry_field_lengths(entry: dict[str, str]) -> None:
+    for key, limit in _ENTRY_MAX_LEN.items():
+        val = entry.get(key) or ""
+        if len(val) > limit:
+            word = entry.get("word") or "?"
+            raise ValueError(
+                f"词条「{word}」的 {key} 过长（上限 {limit} 字符），"
+                "请精简本机数据后重试。"
+            )
+
+
 def normalize_dict_entry(
     raw: Any,
     *,
@@ -131,13 +164,14 @@ def normalize_dict_entry(
     """
     规范化一条本机 ECDICT 增补词条。
     兼容旧版纯字符串词头；require_gloss=True 时仅要求中文释义非空
-    （词性写在释义中，如「n. 苹果」）。
+    （词性写在释义中，如「n. 苹果」）。字段超长抛 ValueError。
     """
     if isinstance(raw, str):
         word = raw.strip().lower()
         if not word:
             return None
         entry = empty_dict_entry(word)
+        _assert_entry_field_lengths(entry)
         if require_gloss:
             raise ValueError(f"「{word}」加入大词典时必须填写中文释义。")
         return entry
@@ -151,14 +185,23 @@ def normalize_dict_entry(
         if key == "word":
             continue
         entry[key] = str(raw.get(key) or "").strip()
+    _assert_entry_field_lengths(entry)
     if require_gloss:
         if not entry["translation"]:
             raise ValueError(f"「{word}」加入大词典时必须填写中文释义。")
     return entry
 
 
-def normalize_dict_extra(raw: Any) -> list[dict[str, str]]:
-    """解析 dict_extra：支持旧版字符串列表与新版词条对象列表。"""
+def normalize_dict_extra(
+    raw: Any,
+    *,
+    strict: bool = False,
+) -> list[dict[str, str]]:
+    """解析 dict_extra：支持旧版字符串列表与新版词条对象列表。
+
+    strict=True 时字段超长等 ValueError 向上抛出（整包拒绝）；
+    默认跳过单条错误（兼容 dump / 旧数据路径）。
+    """
     if raw is None:
         return []
     items = raw if isinstance(raw, (list, tuple)) else [raw]
@@ -167,6 +210,8 @@ def normalize_dict_extra(raw: Any) -> list[dict[str, str]]:
         try:
             entry = normalize_dict_entry(item, require_gloss=False)
         except ValueError:
+            if strict:
+                raise
             continue
         if entry is None:
             continue
@@ -183,19 +228,82 @@ def client_dict_entries_map(user_data: dict[str, Any]) -> dict[str, dict[str, st
     return {e["word"]: e for e in normalize_dict_extra(user_data.get("dict_extra"))}
 
 
+def assert_user_data_limits(data: dict[str, Any]) -> None:
+    """检查已规范化的 user_data；超限抛 ValueError（不截断）。"""
+    extras = data.get("dict_extra") or []
+    if len(extras) > MAX_DICT_EXTRA:
+        raise ValueError(
+            f"本机词典增补不得超过 {MAX_DICT_EXTRA} 条，"
+            f"当前 {len(extras)}。请导出精简后重试。"
+        )
+    for entry in extras:
+        if isinstance(entry, dict):
+            _assert_entry_field_lengths(
+                {k: str(entry.get(k) or "") for k in _ENTRY_MAX_LEN}
+            )
+
+    exclude = data.get("dict_exclude") or []
+    if len(exclude) > MAX_DICT_EXCLUDE:
+        raise ValueError(
+            f"本机词典排除不得超过 {MAX_DICT_EXCLUDE} 个词，"
+            f"当前 {len(exclude)}。请导出精简后重试。"
+        )
+
+    patches = data.get("patches") or {}
+    if len(patches) > MAX_PATCHES:
+        raise ValueError(
+            f"基准对照表差分不得超过 {MAX_PATCHES} 份，"
+            f"当前 {len(patches)}。请导出精简后重试。"
+        )
+    for name, patch in patches.items():
+        if not isinstance(patch, dict):
+            continue
+        add = patch.get("add") or []
+        remove = patch.get("remove") or []
+        total = len(add) + len(remove)
+        if total > MAX_WORDS_PER_LIST:
+            raise ValueError(
+                f"对照表差分「{name}」的增删合计不得超过 "
+                f"{MAX_WORDS_PER_LIST} 个词，当前 {total}。"
+                "请导出精简后重试。"
+            )
+
+    customs = data.get("custom_lists") or {}
+    if len(customs) > MAX_CUSTOM_LISTS:
+        raise ValueError(
+            f"本机自建对照表不得超过 {MAX_CUSTOM_LISTS} 份，"
+            f"当前 {len(customs)}。请导出精简后重试。"
+        )
+    for name, words in customs.items():
+        n = len(words or [])
+        if n > MAX_WORDS_PER_LIST:
+            raise ValueError(
+                f"自建对照表「{name}」不得超过 {MAX_WORDS_PER_LIST} 个词，"
+                f"当前 {n}。请导出精简后重试。"
+            )
+
+
 def parse_user_data(raw: str | None) -> dict[str, Any]:
-    """解析前端提交的 JSON；非法时返回空结构。"""
+    """解析前端提交的 JSON；非法时返回空结构；体量超限抛 ValueError。"""
     data = empty_user_data()
     if not raw or not str(raw).strip():
         return data
+    text = str(raw)
+    if len(text.encode("utf-8")) > MAX_USER_DATA_BYTES:
+        raise ValueError(
+            f"本机数据过大（上限 {MAX_USER_DATA_BYTES // (1024 * 1024)} MB），"
+            "请在设置页导出并精简后再提交。"
+        )
     try:
-        parsed = json.loads(raw)
+        parsed = json.loads(text)
     except (json.JSONDecodeError, TypeError):
         return data
     if not isinstance(parsed, dict):
         return data
 
-    data["dict_extra"] = normalize_dict_extra(parsed.get("dict_extra"))
+    data["dict_extra"] = normalize_dict_extra(
+        parsed.get("dict_extra"), strict=True
+    )
     data["dict_exclude"] = sorted(
         normalize_words(_as_str_list(parsed.get("dict_exclude")))
     )
@@ -231,6 +339,7 @@ def parse_user_data(raw: str | None) -> dict[str, Any]:
 
     data["highlight"] = normalize_highlight(parsed.get("highlight"))
     data["vocab_output"] = normalize_vocab_output(parsed.get("vocab_output"))
+    assert_user_data_limits(data)
     return data
 
 

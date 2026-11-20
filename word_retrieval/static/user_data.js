@@ -18,6 +18,21 @@
     red: { enabled: true, hex: "#c62828" },
   };
   const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+  // 与后端 word_retrieval.user_data 上限对齐（SECURITY 2.2）
+  const MAX_USER_DATA_BYTES = 1 * 1024 * 1024;
+  const MAX_CUSTOM_LISTS = 50;
+  const MAX_PATCHES = 50;
+  const MAX_WORDS_PER_LIST = 50000;
+  const MAX_DICT_EXTRA = 10000;
+  const MAX_DICT_EXCLUDE = 10000;
+  const MAX_ENTRY_LEN = {
+    word: 64,
+    phonetic: 128,
+    definition: 2000,
+    translation: 2000,
+    pos: 128,
+    exchange: 512,
+  };
 
   function defaultVocabOutput() {
     return {
@@ -109,14 +124,42 @@
     return Array.from(out).sort();
   }
 
-  function normalizeDictEntry(raw, requireGloss) {
+  function assertEntryFieldLengths(entry) {
+    Object.keys(MAX_ENTRY_LEN).forEach((key) => {
+      const val = String((entry && entry[key]) || "");
+      const limit = MAX_ENTRY_LEN[key];
+      if (val.length > limit) {
+        const word = (entry && entry.word) || "?";
+        throw new Error(
+          "词条「" +
+            word +
+            "」的 " +
+            key +
+            " 过长（上限 " +
+            limit +
+            " 字符），请精简本机数据后重试。"
+        );
+      }
+    });
+  }
+
+  function normalizeDictEntry(raw, requireGloss, strict) {
     if (typeof raw === "string") {
       const word = raw.trim().toLowerCase();
       if (!word) return null;
+      const entry = emptyDictEntry(word);
+      if (strict) assertEntryFieldLengths(entry);
+      else {
+        try {
+          assertEntryFieldLengths(entry);
+        } catch (_) {
+          return null;
+        }
+      }
       if (requireGloss) {
         throw new Error("「" + word + "」加入大词典时必须填写中文释义。");
       }
-      return emptyDictEntry(word);
+      return entry;
     }
     if (!raw || typeof raw !== "object") return null;
     const word = String(raw.word || "")
@@ -129,6 +172,14 @@
     entry.translation = String(raw.translation || "").trim();
     entry.pos = String(raw.pos || "").trim();
     entry.exchange = String(raw.exchange || "").trim();
+    if (strict) assertEntryFieldLengths(entry);
+    else {
+      try {
+        assertEntryFieldLengths(entry);
+      } catch (_) {
+        return null;
+      }
+    }
     if (requireGloss) {
       if (!entry.translation) {
         throw new Error("「" + word + "」加入大词典时必须填写中文释义。");
@@ -137,19 +188,121 @@
     return entry;
   }
 
-  function normalizeDictExtra(list) {
+  function normalizeDictExtra(list, strict) {
     const byWord = {};
     (Array.isArray(list) ? list : []).forEach((item) => {
       try {
-        const entry = normalizeDictEntry(item, false);
+        const entry = normalizeDictEntry(item, false, !!strict);
         if (entry) byWord[entry.word] = entry;
-      } catch (_) {
-        /* skip */
+      } catch (err) {
+        if (strict) throw err;
       }
     });
     return Object.keys(byWord)
       .sort()
       .map((k) => byWord[k]);
+  }
+
+  function utf8ByteLength(str) {
+    if (typeof TextEncoder !== "undefined") {
+      return new TextEncoder().encode(str).length;
+    }
+    return unescape(encodeURIComponent(str)).length;
+  }
+
+  function assertLimits(data) {
+    const extras = (data && data.dict_extra) || [];
+    if (extras.length > MAX_DICT_EXTRA) {
+      throw new Error(
+        "本机词典增补不得超过 " +
+          MAX_DICT_EXTRA +
+          " 条，当前 " +
+          extras.length +
+          "。请导出精简后重试。"
+      );
+    }
+    extras.forEach((entry) => assertEntryFieldLengths(entry || {}));
+
+    const exclude = (data && data.dict_exclude) || [];
+    if (exclude.length > MAX_DICT_EXCLUDE) {
+      throw new Error(
+        "本机词典排除不得超过 " +
+          MAX_DICT_EXCLUDE +
+          " 个词，当前 " +
+          exclude.length +
+          "。请导出精简后重试。"
+      );
+    }
+
+    const patches = (data && data.patches) || {};
+    const patchKeys = Object.keys(patches);
+    if (patchKeys.length > MAX_PATCHES) {
+      throw new Error(
+        "基准对照表差分不得超过 " +
+          MAX_PATCHES +
+          " 份，当前 " +
+          patchKeys.length +
+          "。请导出精简后重试。"
+      );
+    }
+    patchKeys.forEach((name) => {
+      const p = patches[name] || {};
+      const total = (p.add || []).length + (p.remove || []).length;
+      if (total > MAX_WORDS_PER_LIST) {
+        throw new Error(
+          "对照表差分「" +
+            name +
+            "」的增删合计不得超过 " +
+            MAX_WORDS_PER_LIST +
+            " 个词，当前 " +
+            total +
+            "。请导出精简后重试。"
+        );
+      }
+    });
+
+    const customs = (data && data.custom_lists) || {};
+    const customKeys = Object.keys(customs);
+    if (customKeys.length > MAX_CUSTOM_LISTS) {
+      throw new Error(
+        "本机自建对照表不得超过 " +
+          MAX_CUSTOM_LISTS +
+          " 份，当前 " +
+          customKeys.length +
+          "。请导出精简后重试。"
+      );
+    }
+    customKeys.forEach((name) => {
+      const n = (customs[name] || []).length;
+      if (n > MAX_WORDS_PER_LIST) {
+        throw new Error(
+          "自建对照表「" +
+            name +
+            "」不得超过 " +
+            MAX_WORDS_PER_LIST +
+            " 个词，当前 " +
+            n +
+            "。请导出精简后重试。"
+        );
+      }
+    });
+
+    const encoded = JSON.stringify({
+      version: VERSION,
+      dict_extra: extras,
+      dict_exclude: exclude,
+      patches: patches,
+      custom_lists: customs,
+      highlight: (data && data.highlight) || defaultHighlight(),
+      vocab_output: (data && data.vocab_output) || defaultVocabOutput(),
+    });
+    if (utf8ByteLength(encoded) > MAX_USER_DATA_BYTES) {
+      throw new Error(
+        "本机数据过大（上限 " +
+          MAX_USER_DATA_BYTES / (1024 * 1024) +
+          " MB），请导出并精简后再试。"
+      );
+    }
   }
 
   function safeListName(name) {
@@ -216,16 +369,21 @@
     return out;
   }
 
-  function save(data) {
-    const payload = {
+  function buildPayload(data, strict) {
+    return {
       version: VERSION,
-      dict_extra: normalizeDictExtra(data.dict_extra),
-      dict_exclude: normalizeWords(data.dict_exclude),
-      patches: sanitizePatches(data.patches),
-      custom_lists: sanitizeCustoms(data.custom_lists),
+      dict_extra: normalizeDictExtra(data && data.dict_extra, !!strict),
+      dict_exclude: normalizeWords(data && data.dict_exclude),
+      patches: sanitizePatches(data && data.patches),
+      custom_lists: sanitizeCustoms(data && data.custom_lists),
       highlight: normalizeHighlight(data && data.highlight),
       vocab_output: normalizeVocabOutput(data && data.vocab_output),
     };
+  }
+
+  function save(data) {
+    const payload = buildPayload(data, true);
+    assertLimits(payload);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     return payload;
   }
@@ -295,7 +453,7 @@
     }
   }
 
-  /** 表单提交前写入隐藏域 */
+  /** 表单提交前写入隐藏域；超限则阻止提交 */
   function attachHiddenField(form, fieldName) {
     if (!form) return;
     const name = fieldName || "user_data";
@@ -306,13 +464,27 @@
       input.name = name;
       form.appendChild(input);
     }
-    const sync = () => {
-      input.value = dump();
+    const sync = (ev) => {
       const sel = form.querySelector('select[name="wordlist"]');
       if (sel && sel.value) setSelected(sel.value);
+      try {
+        const payload = buildPayload(load(), true);
+        assertLimits(payload);
+        input.value = JSON.stringify(payload);
+      } catch (err) {
+        if (ev && ev.preventDefault) {
+          ev.preventDefault();
+          alert(err.message || String(err));
+        }
+        throw err;
+      }
     };
     form.addEventListener("submit", sync);
-    sync();
+    try {
+      sync();
+    } catch (_) {
+      /* 初始同步失败不阻断页面；提交时再拦 */
+    }
   }
 
   /** 结果页：用服务端算好的新差分覆盖本地 */
@@ -344,6 +516,12 @@
   global.UserDataStore = {
     STORAGE_KEY,
     DEFAULT_HIGHLIGHT,
+    MAX_USER_DATA_BYTES,
+    MAX_CUSTOM_LISTS,
+    MAX_PATCHES,
+    MAX_WORDS_PER_LIST,
+    MAX_DICT_EXTRA,
+    MAX_DICT_EXCLUDE,
     emptyData,
     emptyDictEntry,
     normalizeDictEntry,
@@ -352,6 +530,7 @@
     normalizeHighlight,
     defaultVocabOutput,
     normalizeVocabOutput,
+    assertLimits,
     load,
     save,
     dump,

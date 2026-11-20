@@ -571,7 +571,10 @@ def upload():
     article = (request.form.get("article") or "").strip()
     has_file = uploaded is not None and bool(uploaded.filename)
     wordlist_name = (request.form.get("wordlist") or "words.txt").strip()
-    user_data = parse_user_data(request.form.get("user_data"))
+    try:
+        user_data = parse_user_data(request.form.get("user_data"))
+    except ValueError as exc:
+        return render_message_page("本机数据过大", str(exc), status=400)
 
     if not has_file and not article:
         return render_message_page(

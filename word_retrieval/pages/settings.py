@@ -23,7 +23,7 @@ def render_settings_page(
     home = url_for("main.index")
     privacy = url_for("main.privacy")
     parse_api = url_for("main.api_parse_wordlist")
-    static_js = url_for("static", filename="user_data.js") + "?v=5"
+    static_js = url_for("static", filename="user_data.js") + "?v=6"
     # 勿对 script 内 JSON 使用 html.escape：script 数据态不解码 &quot;，会导致 JSON.parse 失败
     baseline_json = json.dumps(baseline_wordlists, ensure_ascii=False).replace(
         "<", "\\u003c"
@@ -820,6 +820,17 @@ def render_settings_page(
         const file = ev.target.files && ev.target.files[0];
         if (!file) return;
         const text = await file.text();
+        const bytes =
+          typeof TextEncoder !== "undefined"
+            ? new TextEncoder().encode(text).length
+            : unescape(encodeURIComponent(text)).length;
+        if (bytes > UserDataStore.MAX_USER_DATA_BYTES) {{
+          throw new Error(
+            "导入文件过大（上限 " +
+              UserDataStore.MAX_USER_DATA_BYTES / (1024 * 1024) +
+              " MB），请精简后再导入。"
+          );
+        }}
         const parsed = JSON.parse(text);
         UserDataStore.replaceAll(parsed);
         setStatus("已导入本机数据。");

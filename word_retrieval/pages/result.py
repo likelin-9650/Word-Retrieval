@@ -212,7 +212,7 @@ def render_result_page(
   </main>
   {footer}
   <script type="application/json" id="user-data-payload">{safe_json}</script>
-  <script src="{url_for('static', filename='user_data.js')}?v=5"></script>
+  <script src="{url_for('static', filename='user_data.js')}?v=6"></script>
   <script>
     (function () {{
       const el = document.getElementById("user-data-payload");

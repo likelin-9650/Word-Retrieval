@@ -40,8 +40,8 @@ A local Flask web app that extracts English words from `.docx` or pasted text, c
 公安备案图标：`word_retrieval/static/beian-mps.png`。  
 动态页脚由 `word_retrieval/pages/__init__.py` 生成；首页 `index.html` 为静态页脚，**改号或改页脚链接时两处同步**。
 
-**隐私说明** `/privacy`：说明本站使用浏览器 localStorage 保存对照表差分、词典覆盖、着色偏好等；生产环境以 **HTTPS** 传输；提交时仅当次用于分类与生成下载；当次会话与下载文件落在服务器 `.cache/`（磁盘，多 worker 可共享），约 **30 分钟**惰性清理；**每个下载链接仅一次有效**；粘贴/词数/文档结构有上限以防资源耗尽；首页提交、确认与设置页上传对照表须从本站页面发出（CSRF 令牌校验）；换浏览器或清除站点数据会丢失本机改动（可用设置页导出备份）。页脚「隐私说明」入口指向该页。  
-Privacy note at `/privacy` (footer link): localStorage; **HTTPS** in production; per-job files under server `.cache/` (~30 min lazy TTL, shared across workers); **one-time download links**; paste/word/docx size caps; CSRF tokens on state-changing POSTs; backup via Settings export.
+**隐私说明** `/privacy`：说明本站使用浏览器 localStorage 保存对照表差分、词典覆盖、着色偏好等；生产环境以 **HTTPS** 传输；提交时仅当次用于分类与生成下载；当次会话与下载文件落在服务器 `.cache/`（磁盘，多 worker 可共享），约 **30 分钟**惰性清理；**每个下载链接仅一次有效**；粘贴/词数/文档结构有上限以防资源耗尽；本机差分 JSON（首页提交与设置页导入）有体积与词条数上限（约 **1MB** / 表与词条数帽），超限拒绝；首页提交、确认与设置页上传对照表须从本站页面发出（CSRF 令牌校验）；换浏览器或清除站点数据会丢失本机改动（可用设置页导出备份）。页脚「隐私说明」入口指向该页。  
+Privacy note at `/privacy` (footer link): localStorage; **HTTPS** in production; per-job files under server `.cache/` (~30 min lazy TTL, shared across workers); **one-time download links**; paste/word/docx size caps; browser `user_data` JSON size/entry caps (~**1MB**); CSRF tokens on state-changing POSTs; backup via Settings export.
 
 ---
 
@@ -193,8 +193,8 @@ python app.py
    - 删除本机自建对照表（基准 `words.txt` 等不可删）  
    - **导出 / 导入 / 清除**本机数据（含着色与释义表输出偏好）  
 
-上传文档大小上限约 **16MB**；粘贴文本约 **20 万字符**；合并文本约 **50 万字符**；提取后不重复单词约 **5000**（超限友好拒绝）。当次会话（含上传原文）与生成的释义表/着色文档缓存在服务器 `.cache/sessions/`、`.cache/downloads/`（磁盘，gunicorn 多 worker 可共享）：约 **30 分钟**惰性清理；同时会话约 **50**、缓存合计约 **500MB** 上限（超限友好拒绝）；**每个下载链接仅可使用一次**（首次下载后删除）。`POST /upload`、`POST /confirm`、`POST /api/parse_wordlist` 需本站页面签发的 CSRF 令牌（密钥：环境变量 `WR_CSRF_SECRET` 或 `.cache/csrf_secret`）。轻量存活检查：`GET /healthz`（不加载 ECDICT）。  
-Upload cap ~**16MB**; paste ~**200k** chars; combined text ~**500k** chars; unique extracted words ~**5000**. Per-job cache under `.cache/sessions/` and `.cache/downloads/` (shared across workers): ~**30 min** lazy TTL; ~**50** concurrent sessions and ~**500MB** total cache cap; **one-time download links**. State-changing POSTs require a CSRF token from this site (`WR_CSRF_SECRET` or `.cache/csrf_secret`). Liveness: `GET /healthz` (does not load ECDICT).
+上传文档大小上限约 **16MB**；粘贴文本约 **20 万字符**；合并文本约 **50 万字符**；提取后不重复单词约 **5000**（超限友好拒绝）。本机差分 JSON（提交与设置页导入）约 **1MB**，自建表/差分各 ≤**50** 份，单表或单差分增删合计 ≤**5 万**词，词典增补/排除各 ≤**1 万**（超限拒绝，不截断）。当次会话（含上传原文）与生成的释义表/着色文档缓存在服务器 `.cache/sessions/`、`.cache/downloads/`（磁盘，gunicorn 多 worker 可共享）：约 **30 分钟**惰性清理；同时会话约 **50**、缓存合计约 **500MB** 上限（超限友好拒绝）；**每个下载链接仅可使用一次**（首次下载后删除）。`POST /upload`、`POST /confirm`、`POST /api/parse_wordlist` 需本站页面签发的 CSRF 令牌（密钥：环境变量 `WR_CSRF_SECRET` 或 `.cache/csrf_secret`）。轻量存活检查：`GET /healthz`（不加载 ECDICT）。  
+Upload cap ~**16MB**; paste ~**200k** chars; combined text ~**500k** chars; unique extracted words ~**5000**. Browser `user_data` JSON ~**1MB**; ≤**50** custom lists / patches; ≤**50k** words per list or patch; ≤**10k** dict extra/exclude (reject, no truncate). Per-job cache under `.cache/sessions/` and `.cache/downloads/` (shared across workers): ~**30 min** lazy TTL; ~**50** concurrent sessions and ~**500MB** total cache cap; **one-time download links**. State-changing POSTs require a CSRF token from this site (`WR_CSRF_SECRET` or `.cache/csrf_secret`). Liveness: `GET /healthz` (does not load ECDICT).
 
 ### 上传对照表格式 · Wordlist `.txt` format
 

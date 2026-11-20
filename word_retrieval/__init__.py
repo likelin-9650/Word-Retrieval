@@ -38,6 +38,22 @@ def create_app() -> Flask:
     app.config["MAX_DOCX_RATIO"] = 100
     app.config["MAX_ALGO_EXPAND_WORDS"] = 20_000
     app.config["MAX_EXPAND_SEC"] = 20
+    # 本机 user_data 体量（SECURITY 2.2；与 user_data 模块常量对齐）
+    from word_retrieval.user_data import (
+        MAX_CUSTOM_LISTS,
+        MAX_DICT_EXCLUDE,
+        MAX_DICT_EXTRA,
+        MAX_PATCHES,
+        MAX_USER_DATA_BYTES,
+        MAX_WORDS_PER_LIST,
+    )
+
+    app.config["MAX_USER_DATA_BYTES"] = MAX_USER_DATA_BYTES
+    app.config["MAX_CUSTOM_LISTS"] = MAX_CUSTOM_LISTS
+    app.config["MAX_PATCHES"] = MAX_PATCHES
+    app.config["MAX_WORDS_PER_LIST"] = MAX_WORDS_PER_LIST
+    app.config["MAX_DICT_EXTRA"] = MAX_DICT_EXTRA
+    app.config["MAX_DICT_EXCLUDE"] = MAX_DICT_EXCLUDE
     app.config["ECDICT_DB"] = PROJECT_ROOT / "dictionaries" / "ecdict.db"
     # 服务器仍可保留空覆盖文件；网页用户改动写入浏览器，不再写这些共享文件
     app.config["DICT_EXTRA"] = PROJECT_ROOT / "dictionaries" / "dict_extra.txt"
