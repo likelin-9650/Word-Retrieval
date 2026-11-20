@@ -717,7 +717,8 @@ def download_file(token: str):
         return render_message_page("无效链接", "下载链接无效。", status=404)
 
     _cleanup_job_cache()
-    meta = get_download(_download_dir(), token)
+    download_dir = _download_dir()
+    meta = get_download(download_dir, token)
     if meta is None:
         return render_message_page(
             "文件已过期",
@@ -725,9 +726,18 @@ def download_file(token: str):
             status=404,
         )
 
-    path = Path(meta["path"])
-    if not path.exists():
-        delete_download(_download_dir(), token)
+    path = Path(meta["path"]).resolve()
+    try:
+        path.relative_to(download_dir.resolve())
+    except ValueError:
+        delete_download(download_dir, token)
+        return render_message_page(
+            "文件已过期",
+            "文档不存在，请重新提交生成。",
+            status=404,
+        )
+    if not path.is_file():
+        delete_download(download_dir, token)
         return render_message_page(
             "文件已过期",
             "文档不存在，请重新提交生成。",
@@ -738,14 +748,14 @@ def download_file(token: str):
     try:
         payload = path.read_bytes()
     except OSError:
-        delete_download(_download_dir(), token)
+        delete_download(download_dir, token)
         return render_message_page(
             "文件已过期",
             "文档读取失败，请重新提交生成。",
             status=404,
         )
     download_name = meta["download_name"]
-    delete_download(_download_dir(), token)
+    delete_download(download_dir, token)
 
     return send_file(
         BytesIO(payload),

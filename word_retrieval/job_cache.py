@@ -20,8 +20,25 @@ TOKEN_RE = re.compile(r"^[0-9a-f]{32}$")
 DEFAULT_MAX_AGE_SEC = 1800  # 30 分钟
 DEFAULT_MAX_SESSIONS = 50
 DEFAULT_MAX_CACHE_BYTES = 500 * 1024 * 1024  # 500 MB
+_SAFE_STEM_RE = re.compile(r"[^\w\-]+", flags=re.UNICODE)
+_MAX_DOWNLOAD_STEM_LEN = 80
 
 _WORD_LIST_KEYS = ("green", "yellow", "red")
+
+
+def safe_download_name(name: str | None) -> str:
+    """Content-Disposition 用文件名：仅 basename、词干白名单、后缀必须 .docx。"""
+    raw = Path(str(name or "")).name
+    if not raw.lower().endswith(".docx"):
+        return "document.docx"
+    # 不用 Path.stem：Windows 上 ".docx" 的 stem 会变成 "docx"
+    stem = raw[:-5]
+    stem = _SAFE_STEM_RE.sub("_", stem).strip("_")
+    if not stem:
+        return "document.docx"
+    if len(stem) > _MAX_DOWNLOAD_STEM_LEN:
+        stem = stem[:_MAX_DOWNLOAD_STEM_LEN].rstrip("_") or "document"
+    return f"{stem}.docx"
 
 
 class CacheLimitError(ValueError):
@@ -246,7 +263,7 @@ def store_download(download_dir: Path, content: bytes, download_name: str) -> st
     _atomic_write_bytes(docx_path, content)
     meta = {
         "path": str(docx_path),
-        "download_name": download_name,
+        "download_name": safe_download_name(download_name),
         "created_at": time.time(),
     }
     _atomic_write_text(meta_path, json.dumps(meta, ensure_ascii=False))
@@ -265,10 +282,11 @@ def get_download(download_dir: Path, token: str) -> dict[str, Any] | None:
         return None
     if not isinstance(data, dict):
         return None
-    path_str = data.get("path") or str(_download_docx_path(download_dir, token))
+    # 忽略 meta.path：始终只读本目录下 {token}.docx
+    docx_path = _download_docx_path(download_dir, token)
     return {
-        "path": path_str,
-        "download_name": data.get("download_name") or "document.docx",
+        "path": str(docx_path),
+        "download_name": safe_download_name(data.get("download_name")),
         "created_at": float(data.get("created_at") or 0),
     }
 
