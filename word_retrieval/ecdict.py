@@ -244,9 +244,27 @@ def lookup_definitions(
         return result
 
 
-@lru_cache(maxsize=2)
 def load_ecdict_headwords(db_path: str) -> frozenset[str]:
-    """读取 ECDICT 全部词头（小写），用于黄/红分类大词典。"""
+    """读取 ECDICT 全部词头（小写），用于黄/红分类大词典。
+
+    按 path + 文件 mtime 缓存；库文件变更后下次加载自动刷新（仅当前进程）。
+    """
+    path = Path(db_path)
+    if not path.exists():
+        raise EcdictError(
+            f"未找到 ECDICT 数据库：{path.name}。请先运行 build_ecdict_db.py 生成。"
+        )
+    try:
+        mtime_ns = path.stat().st_mtime_ns
+    except OSError as exc:
+        raise EcdictError(
+            f"未找到 ECDICT 数据库：{path.name}。请先运行 build_ecdict_db.py 生成。"
+        ) from exc
+    return _load_ecdict_headwords_cached(str(path), mtime_ns)
+
+
+@lru_cache(maxsize=1)
+def _load_ecdict_headwords_cached(db_path: str, mtime_ns: int) -> frozenset[str]:
     path = Path(db_path)
     if not path.exists():
         raise EcdictError(
@@ -318,4 +336,4 @@ def load_exchange_map(
 
 
 def clear_ecdict_headwords_cache() -> None:
-    load_ecdict_headwords.cache_clear()
+    _load_ecdict_headwords_cached.cache_clear()

@@ -26,6 +26,8 @@
 # 四、服务器准备：
 #   1. Python3、python3-venv、Nginx、gunicorn、systemd
 #      pip 已配置使用清华镜像 https://pypi.tuna.tsinghua.edu.cn/simple
+#      依赖版本以仓库 requirements.txt 为准（全部 == 钉死，含 gunicorn）；
+#      部署只 pip install -r requirements.txt，勿旁路装未钉版本。
 #   2. 安全组放行 22
 #   3. 无密 sudo 重启 word-retrieval：
 #

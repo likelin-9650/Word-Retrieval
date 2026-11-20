@@ -18,9 +18,21 @@ MAX_UPLOAD_BYTES = 1 * 1024 * 1024
 MAX_UPLOAD_WORDS = 200_000
 
 
-@lru_cache(maxsize=32)
 def load_word_set(path: str) -> frozenset[str]:
-    """读取一行一词的词表，返回小写集合。"""
+    """读取一行一词的词表，返回小写集合。
+
+    按 path + 文件 mtime 缓存；文件变更后下次加载自动刷新（仅当前进程）。
+    """
+    file_path = Path(path)
+    try:
+        mtime_ns = file_path.stat().st_mtime_ns
+    except OSError:
+        mtime_ns = -1
+    return _load_word_set_cached(path, mtime_ns)
+
+
+@lru_cache(maxsize=32)
+def _load_word_set_cached(path: str, mtime_ns: int) -> frozenset[str]:
     file_path = Path(path)
     if not file_path.exists():
         return frozenset()
@@ -29,7 +41,7 @@ def load_word_set(path: str) -> frozenset[str]:
 
 
 def clear_word_cache() -> None:
-    load_word_set.cache_clear()
+    _load_word_set_cached.cache_clear()
 
 
 def load_known_words(path: str) -> frozenset[str]:
