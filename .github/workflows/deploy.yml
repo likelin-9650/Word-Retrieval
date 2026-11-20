@@ -97,4 +97,19 @@ jobs:
               exit 1
             fi
 
+            echo "==> 等待 /healthz（轻量探活，不加载 ECDICT）"
+            ok=0
+            for i in $(seq 1 30); do
+              if curl -sf http://127.0.0.1:5000/healthz | grep -q '"ok"'; then
+                echo "healthz ok (attempt $i)"
+                ok=1
+                break
+              fi
+              sleep 1
+            done
+            if [ "$ok" != 1 ]; then
+              echo "错误: /healthz 在 30s 内未就绪"
+              exit 1
+            fi
+
             echo "==> 部署完成: $(date -R)"

@@ -32,14 +32,27 @@
 #      ubuntu ALL=(ALL) NOPASSWD: /bin/systemctl restart word-retrieval, /bin/systemctl status word-retrieval, /bin/systemctl is-active word-retrieval
 #
 #   4. 已创建 word-retrieval.service。会话/下载在磁盘 `.cache/`，可用多 worker。
-#      ExecStart 示例（按实际 User、WorkingDirectory、venv 路径改）：
+#      ExecStart 示例（按实际 User、WorkingDirectory、venv 路径改）。
+#      优雅停机（SECURITY 3.1）：TimeoutStopSec / KillMode + gunicorn
+#      --graceful-timeout / --timeout；改完后须手动：
+#        sudo systemctl daemon-reload && sudo systemctl restart word-retrieval
+#      Actions 不会改 unit 文件。
 #
 #      [Service]
 #      User=deploy
 #      WorkingDirectory=/home/deploy/Word-Retrieval
+#      TimeoutStopSec=60
+#      KillMode=mixed
 #      ExecStart=/home/deploy/Word-Retrieval/.venv/bin/gunicorn \
-#        -w 2 -b 127.0.0.1:5000 'word_retrieval:create_app()'
+#        -w 2 -b 127.0.0.1:5000 \
+#        --timeout 120 \
+#        --graceful-timeout 30 \
+#        'word_retrieval:create_app()'
 #      Restart=on-failure
+#
+#      说明：--graceful-timeout 30 = 停 worker 最多等 30s；
+#      TimeoutStopSec=60 给 master 留余量；--timeout 120 = 单请求硬上限
+#      （上传/派生勿误杀）。探活：curl -s http://127.0.0.1:5000/healthz
 #
 # 五、关于 ecdict.db（服务器若也无法访问 GitHub）：
 #
@@ -68,6 +81,15 @@
 #        # limit_req_zone $binary_remote_addr zone=wr_general:10m rate=10r/s;
 #        # limit_req_zone $binary_remote_addr zone=wr_heavy:10m rate=2r/s;
 #
+#        # upstream + 短连重试（SECURITY 3.1）：单机一个后端时，
+#        # proxy_next_upstream 主要是「再试同机一次」，对进程完全未起来
+#        # 帮助有限；真正缩短 refused 靠 gunicorn 尽快 bind + 优雅停。
+#        # 须服务器手动改；Actions 不改 Nginx。
+#        upstream word_retrieval {
+#            server 127.0.0.1:5000;
+#            keepalive 8;
+#        }
+#
 #        server {
 #            listen 80;
 #            server_name wordsorting.com;
@@ -76,7 +98,13 @@
 #
 #            location = /upload {
 #                limit_req zone=wr_heavy burst=5 nodelay;
-#                proxy_pass http://127.0.0.1:5000;
+#                proxy_pass http://word_retrieval;
+#                proxy_http_version 1.1;
+#                proxy_set_header Connection "";
+#                proxy_connect_timeout 2s;
+#                proxy_read_timeout 120s;
+#                proxy_next_upstream error timeout http_502 http_503;
+#                proxy_next_upstream_tries 2;
 #                proxy_set_header Host $host;
 #                proxy_set_header X-Real-IP $remote_addr;
 #                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -85,7 +113,13 @@
 #
 #            location = /api/parse_wordlist {
 #                limit_req zone=wr_heavy burst=5 nodelay;
-#                proxy_pass http://127.0.0.1:5000;
+#                proxy_pass http://word_retrieval;
+#                proxy_http_version 1.1;
+#                proxy_set_header Connection "";
+#                proxy_connect_timeout 2s;
+#                proxy_read_timeout 120s;
+#                proxy_next_upstream error timeout http_502 http_503;
+#                proxy_next_upstream_tries 2;
 #                proxy_set_header Host $host;
 #                proxy_set_header X-Real-IP $remote_addr;
 #                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -94,7 +128,13 @@
 #
 #            location / {
 #                limit_req zone=wr_general burst=20 nodelay;
-#                proxy_pass http://127.0.0.1:5000;
+#                proxy_pass http://word_retrieval;
+#                proxy_http_version 1.1;
+#                proxy_set_header Connection "";
+#                proxy_connect_timeout 2s;
+#                proxy_read_timeout 120s;
+#                proxy_next_upstream error timeout http_502 http_503;
+#                proxy_next_upstream_tries 2;
 #                proxy_set_header Host $host;
 #                proxy_set_header X-Real-IP $remote_addr;
 #                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -102,8 +142,9 @@
 #            }
 #        }
 #
-#      限流为可选加固：须在服务器上手动写入、sudo nginx -t && sudo systemctl reload nginx。
-#      Actions 部署不会改 Nginx。健康检查可用：curl -s http://127.0.0.1:5000/healthz
+#      限流与 upstream 重试为可选加固：须在服务器上手动写入、
+#      sudo nginx -t && sudo systemctl reload nginx。Actions 部署不会改 Nginx。
+#      健康检查可用：curl -s http://127.0.0.1:5000/healthz（轻量，不加载 ECDICT）
 #
 #      sudo ln -sf /etc/nginx/sites-available/wordsorting /etc/nginx/sites-enabled/
 #      sudo nginx -t && sudo systemctl reload nginx
