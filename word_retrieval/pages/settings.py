@@ -18,6 +18,7 @@ from word_retrieval.pages import (
 def render_settings_page(
     *,
     baseline_wordlists: list[str],
+    csrf_token: str = "",
 ) -> str:
     home = url_for("main.index")
     privacy = url_for("main.privacy")
@@ -27,6 +28,7 @@ def render_settings_page(
     baseline_json = json.dumps(baseline_wordlists, ensure_ascii=False).replace(
         "<", "\\u003c"
     )
+    csrf_token_js = json.dumps(csrf_token)
     footer = icp_footer_html()
     exchange_block = exchange_field_html(
         input_html=(
@@ -333,6 +335,7 @@ def render_settings_page(
   <script src="{static_js}"></script>
   <script>
     const PARSE_API = {json.dumps(parse_api)};
+    const CSRF_TOKEN = {csrf_token_js};
     const baselineEl = document.getElementById("baseline-wordlists");
     let BASELINE = [];
     try {{
@@ -750,6 +753,7 @@ def render_settings_page(
         }}
         const fd = new FormData();
         fd.append("wordlist_file", fileInput.files[0]);
+        fd.append("csrf_token", CSRF_TOKEN);
         if (document.getElementById("use_ecdict_exchange").checked) {{
           fd.append("use_ecdict_exchange", "1");
         }} else {{

@@ -13,6 +13,7 @@ from zipfile import BadZipFile
 from docx.opc.exceptions import PackageNotFoundError
 from flask import Blueprint, current_app, jsonify, request, send_file
 
+from word_retrieval.csrf import issue_csrf_token, validate_csrf_token
 from word_retrieval.ecdict import EcdictError, load_ecdict_headwords, lookup_definitions
 from word_retrieval.extractor import extract_english_words, read_docx_text
 from word_retrieval.highlighter import build_highlighted_docx
@@ -59,6 +60,7 @@ bp = Blueprint("main", __name__)
 logger = logging.getLogger(__name__)
 
 _ECDICT_PUBLIC_ERROR = "服务器缺少大词典，请联系管理员。"
+_CSRF_FAIL_MESSAGE = "请求未通过安全校验，请从本站页面重新提交。"
 
 
 def _safe_public_message(exc: BaseException, *, fallback: str) -> str:
@@ -95,6 +97,38 @@ def _safe_stem(filename: str) -> str:
     return stem or "document"
 
 
+def _issue_csrf() -> str:
+    return issue_csrf_token(
+        current_app.config["CSRF_SECRET"],
+        max_age_sec=int(current_app.config["CSRF_TOKEN_MAX_AGE_SEC"]),
+    )
+
+
+def _csrf_ok() -> bool:
+    return validate_csrf_token(
+        current_app.config["CSRF_SECRET"],
+        request.form.get("csrf_token"),
+        max_age_sec=int(current_app.config["CSRF_TOKEN_MAX_AGE_SEC"]),
+    )
+
+
+def _require_csrf_page():
+    """表单页 POST：失败返回 403 提示页，成功返回 None。"""
+    if _csrf_ok():
+        return None
+    return render_message_page("安全校验失败", _CSRF_FAIL_MESSAGE, status=403)
+
+
+def _require_csrf_json():
+    """JSON API POST：失败返回 403 JSON，成功返回 None。"""
+    if _csrf_ok():
+        return None
+    return (
+        jsonify({"ok": False, "error": _CSRF_FAIL_MESSAGE}),
+        403,
+    )
+
+
 def _store_download(content: bytes, download_name: str) -> str:
     ensure_cache_capacity(
         _session_dir(),
@@ -124,7 +158,8 @@ def _render_index() -> str:
     options_html = "\n          ".join(options)
     baseline_json = json.dumps(names, ensure_ascii=False)
     html = html.replace("<!--WORDLIST_OPTIONS-->", options_html)
-    return html.replace("<!--BASELINE_WORDLISTS_JSON-->", baseline_json)
+    html = html.replace("<!--BASELINE_WORDLISTS_JSON-->", baseline_json)
+    return html.replace("<!--CSRF_TOKEN-->", _issue_csrf())
 
 
 def _classification_dictionary(user_data: dict) -> frozenset[str]:
@@ -241,6 +276,7 @@ def _begin_review(
         yellow_words=yellow,
         red_words=red,
         highlight=get_highlight(user_data),
+        csrf_token=_issue_csrf(),
     )
 
 
@@ -410,7 +446,10 @@ def settings():
         legacy_words=Path(current_app.config["LEGACY_WORDS_TXT"]),
     )
     names = _baseline_names()
-    return render_settings_page(baseline_wordlists=names)
+    return render_settings_page(
+        baseline_wordlists=names,
+        csrf_token=_issue_csrf(),
+    )
 
 
 @bp.get("/privacy")
@@ -433,6 +472,10 @@ def api_parse_wordlist():
       use_ecdict_exchange=1 — 采信 ECDICT exchange（默认开启若未传则看该字段）
       algo_mode=none|all|pick — 算法扩充策略
     """
+    denied = _require_csrf_json()
+    if denied is not None:
+        return denied
+
     uploaded = request.files.get("wordlist_file")
     if uploaded is None or not uploaded.filename:
         return jsonify({"ok": False, "error": "请选择要上传的 .txt 文件。"}), 400
@@ -520,6 +563,10 @@ def api_parse_wordlist():
 
 @bp.post("/upload")
 def upload():
+    denied = _require_csrf_page()
+    if denied is not None:
+        return denied
+
     uploaded = request.files.get("document")
     article = (request.form.get("article") or "").strip()
     has_file = uploaded is not None and bool(uploaded.filename)
@@ -591,6 +638,10 @@ def upload():
 
 @bp.post("/confirm")
 def confirm():
+    denied = _require_csrf_page()
+    if denied is not None:
+        return denied
+
     _cleanup_job_cache()
     session_id = (request.form.get("session_id") or "").strip()
     if not TOKEN_RE.fullmatch(session_id):

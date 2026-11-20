@@ -196,6 +196,7 @@
     <p class="hint" id="serverHint" hidden style="color:#a33;margin-bottom:1rem;"></p>
 
     <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="<!--CSRF_TOKEN-->" />
       <div>
         <label for="wordlist">选择对照表</label>
         <select id="wordlist" name="wordlist">

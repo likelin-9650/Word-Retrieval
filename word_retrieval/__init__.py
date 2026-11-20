@@ -24,6 +24,8 @@ def create_app() -> Flask:
     app.config["SCOWL_WORDS"] = PROJECT_ROOT / "scowl_words.txt"
     app.config["DOWNLOAD_DIR"] = PROJECT_ROOT / ".cache" / "downloads"
     app.config["SESSION_DIR"] = PROJECT_ROOT / ".cache" / "sessions"
+    app.config["CSRF_SECRET_PATH"] = PROJECT_ROOT / ".cache" / "csrf_secret"
+    app.config["CSRF_TOKEN_MAX_AGE_SEC"] = 7200  # 2 小时
     app.config["CACHE_MAX_AGE_SEC"] = 1800  # 30 分钟
     app.config["CACHE_MAX_SESSIONS"] = 50
     app.config["CACHE_MAX_BYTES"] = 500 * 1024 * 1024  # 500 MB
@@ -52,9 +54,11 @@ def create_app() -> Flask:
     )
     ensure_dict_override_files(app.config["DICT_EXTRA"], app.config["DICT_EXCLUDE"])
 
+    from word_retrieval.csrf import ensure_csrf_secret
     from word_retrieval.job_cache import cleanup_expired, ensure_cache_dirs
 
     ensure_cache_dirs(app.config["SESSION_DIR"], app.config["DOWNLOAD_DIR"])
+    app.config["CSRF_SECRET"] = ensure_csrf_secret(app.config["CSRF_SECRET_PATH"])
     cleanup_expired(
         app.config["SESSION_DIR"],
         app.config["DOWNLOAD_DIR"],

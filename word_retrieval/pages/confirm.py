@@ -103,6 +103,7 @@ def render_confirm_page(
     yellow_words: set[str],
     red_words: set[str],
     highlight: dict | None = None,
+    csrf_token: str = "",
 ) -> str:
     from word_retrieval.user_data import normalize_highlight
 
@@ -256,6 +257,7 @@ def render_confirm_page(
 
     <form method="post" action="{action}">
       <input type="hidden" name="session_id" value="{html.escape(session_id)}" />
+      <input type="hidden" name="csrf_token" value="{html.escape(csrf_token)}" />
 
       <section class="panel" data-group="green">
         <h2 style="color:var(--known)">绿色词 — 释义表与剔出对照表分开选择</h2>
