@@ -81,9 +81,11 @@ def create_app() -> Flask:
         max_age_sec=app.config["CACHE_MAX_AGE_SEC"],
     )
 
+    from word_retrieval.request_logging import register_request_logging
     from word_retrieval.routes import bp
     from word_retrieval.security_headers import register_security_headers
 
     app.register_blueprint(bp)
     register_security_headers(app)
+    register_request_logging(app)
     return app

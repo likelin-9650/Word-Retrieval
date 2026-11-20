@@ -71,6 +71,13 @@ def _safe_public_message(exc: BaseException, *, fallback: str) -> str:
     return fallback
 
 
+def _log_cache_limit(exc: BaseException) -> None:
+    logger.warning(
+        "cache limit",
+        extra={"event": "cache_limit", "detail": str(exc)},
+    )
+
+
 def _session_dir() -> Path:
     return Path(current_app.config["SESSION_DIR"])
 
@@ -116,6 +123,7 @@ def _require_csrf_page():
     """表单页 POST：失败返回 403 提示页，成功返回 None。"""
     if _csrf_ok():
         return None
+    logger.warning("csrf rejected", extra={"event": "csrf_rejected"})
     return render_message_page("安全校验失败", _CSRF_FAIL_MESSAGE, status=403)
 
 
@@ -123,6 +131,7 @@ def _require_csrf_json():
     """JSON API POST：失败返回 403 JSON，成功返回 None。"""
     if _csrf_ok():
         return None
+    logger.warning("csrf rejected", extra={"event": "csrf_rejected"})
     return (
         jsonify({"ok": False, "error": _CSRF_FAIL_MESSAGE}),
         403,
@@ -230,11 +239,18 @@ def _begin_review(
 
     green, yellow, red = classify_words(words, known=known, dictionary=dictionary)
 
-    print("=" * 40)
-    print(f"来源: {source_label}")
-    print(f"对照表: {wordlist_name}（用户差分已合并）")
-    print(f"总计 {len(words)} | 绿 {len(green)} | 黄 {len(yellow)} | 红 {len(red)}")
-    print("=" * 40)
+    logger.info(
+        "classify",
+        extra={
+            "event": "classify",
+            "source_label": source_label,
+            "wordlist": wordlist_name,
+            "total": len(words),
+            "green_n": len(green),
+            "yellow_n": len(yellow),
+            "red_n": len(red),
+        },
+    )
 
     try:
         ensure_cache_capacity(
@@ -247,6 +263,7 @@ def _begin_review(
             require_session_slot=True,
         )
     except CacheLimitError as exc:
+        _log_cache_limit(exc)
         return render_message_page("暂时无法处理", str(exc), status=503)
 
     session_id = uuid.uuid4().hex
@@ -354,6 +371,7 @@ def _finalize_session(
         try:
             highlight_token = _store_download(highlighted, highlight_name)
         except CacheLimitError as exc:
+            _log_cache_limit(exc)
             return render_message_page("暂时无法处理", str(exc), status=503)
 
     vocab_words = keep_red | green_to_vocab
@@ -384,6 +402,7 @@ def _finalize_session(
             )
         vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
     except CacheLimitError as exc:
+        _log_cache_limit(exc)
         return render_message_page("暂时无法处理", str(exc), status=503)
     except EcdictError as exc:
         logger.exception("查词 ECDICT 不可用: %s", exc)
@@ -392,6 +411,7 @@ def _finalize_session(
         try:
             vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
         except CacheLimitError as limit_exc:
+            _log_cache_limit(limit_exc)
             return render_message_page("暂时无法处理", str(limit_exc), status=503)
     except Exception as exc:  # noqa: BLE001
         translate_error = _safe_public_message(
@@ -401,6 +421,7 @@ def _finalize_session(
         try:
             vocab_token = _store_download(build_vocabulary_docx(pairs), vocab_name)
         except CacheLimitError as limit_exc:
+            _log_cache_limit(limit_exc)
             return render_message_page("暂时无法处理", str(limit_exc), status=503)
 
     known = resolve_known_words(updated_user_data, wordlist_name, _wordlists_dir())

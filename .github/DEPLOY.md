@@ -54,6 +54,10 @@
 #      TimeoutStopSec=60 给 master 留余量；--timeout 120 = 单请求硬上限
 #      （上传/派生勿误杀）。探活：curl -s http://127.0.0.1:5000/healthz
 #
+#      应用日志（SECURITY 3.2）：Flask 打 JSON 一行到 stderr（含 request_id；
+#      响应头 X-Request-ID）。查看：journalctl -u word-retrieval -f
+#      GET /healthz 不打应用 INFO 访问行。
+#
 # 五、关于 ecdict.db（服务器若也无法访问 GitHub）：
 #
 #   在能上网的电脑上：
